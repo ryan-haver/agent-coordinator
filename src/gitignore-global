@@ -1,0 +1,7 @@
+# Smart Handoff — prevent sensitive thought-trace artifacts from being committed
+handoff_active.md
+handoff_*.md
+context_summary_*.md
+
+# Antigravity configs
+.antigravity-configs/

@@ -1,0 +1,51 @@
+{
+  "model_fallback_chain": {
+    "description": "Global model hierarchy for the Smart Handoff System",
+    "tiers": [
+      {
+        "tier": 1,
+        "role": "The Architect",
+        "model": "google-antigravity/claude-opus-latest",
+        "strengths": [
+          "Deep reasoning",
+          "Architectural decisions",
+          "Subtle debugging",
+          "DRY principles"
+        ],
+        "use_when": "Complex logic, code review, edge-case analysis, design decisions"
+      },
+      {
+        "tier": 2,
+        "role": "The Context King",
+        "model": "google-antigravity/gemini-3-pro-high",
+        "strengths": [
+          "Large context window",
+          "Multi-file scanning",
+          "Cross-file pattern recognition",
+          "Codebase navigation"
+        ],
+        "use_when": "Context overflow from Tier 1, large refactoring, multi-file analysis"
+      },
+      {
+        "tier": 3,
+        "role": "The Speed Specialist",
+        "model": "google-antigravity/gemini-3-flash",
+        "strengths": [
+          "Fast iteration",
+          "Simple tasks",
+          "Documentation",
+          "Formatting",
+          "Quick fixes"
+        ],
+        "use_when": "Simple cleanup, docs, formatting, low-complexity changes"
+      }
+    ],
+    "policies": {
+      "on_context_limit": "handoff_and_resume",
+      "on_reasoning_failure": "escalate",
+      "reasoning_failure_threshold": 3,
+      "context_compression_interval_tokens": 50000,
+      "context_warning_threshold_percent": 85
+    }
+  }
+}
