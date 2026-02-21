@@ -42,7 +42,7 @@ foreach ($name in @("agent-coordination", "smart-handoff")) {
 
 # 3. Workflows
 $wfDir = Join-Path $home_ ".gemini\antigravity\.agent\workflows"
-foreach ($wf in @("pivot.md", "resume.md", "health.md", "swarm.md", "swarm-auto.md")) {
+foreach ($wf in @("pivot.md", "resume.md", "health.md", "swarm.md", "swarm-auto.md", "consult.md", "status.md")) {
     $p = Join-Path $wfDir $wf
     if (Test-Path $p) { Remove-Item $p -Force; Write-Host "  ✅ Removed $wf" -ForegroundColor Green }
 }

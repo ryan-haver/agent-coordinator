@@ -13,7 +13,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $home_ = $env:USERPROFILE
-$settingsPath = Join-Path $env:APPDATA "Roaming\Antigravity\User\settings.json"
+$settingsPath = Join-Path $env:APPDATA "Antigravity\User\settings.json"
 $backupPath = Join-Path $home_ ".antigravity-configs\settings_backup.json"
 
 # Check if the path differs slightly (e.g. VS Code vs Antigravity)

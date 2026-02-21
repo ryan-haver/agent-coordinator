@@ -40,7 +40,7 @@ done
 
 # 3. Workflows
 WF_DIR="$HOME_DIR/.gemini/antigravity/.agent/workflows"
-for wf in pivot.md resume.md health.md swarm.md swarm-auto.md; do
+for wf in pivot.md resume.md health.md swarm.md swarm-auto.md consult.md status.md; do
     if [ -f "$WF_DIR/$wf" ]; then
         rm -f "$WF_DIR/$wf"
         echo "  ✅ Removed $wf"

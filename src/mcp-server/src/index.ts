@@ -17,6 +17,9 @@ import path from "path";
 import os from "os";
 import fs from "fs";
 
+// Read version from package.json at startup
+const PKG = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')), '..', '..', 'package.json'), 'utf8'));
+
 // Determine workspace root. Since this server runs in the context of the workspace, CWD is usually correct, or we take a fallback.
 const workspaceRoot = process.cwd();
 const globalConfigPath = path.join(os.homedir(), ".antigravity-configs");
@@ -24,7 +27,7 @@ const globalConfigPath = path.join(os.homedir(), ".antigravity-configs");
 const server = new Server(
     {
         name: "agent-coordinator",
-        version: "1.0.0",
+        version: PKG.version || "1.0.0",
     },
     {
         capabilities: {
@@ -46,13 +49,23 @@ function writeSwarmStatus(rootDir: string, md: string, lastEvent: string) {
         const modeSection = md.match(/Supervision:\s*(\w+)/);
         const supervision = modeSection ? modeSection[1] : "unknown";
 
+        // Extract mission for the task field
+        const missionMatch = md.match(/## Mission\s*\n+(.+)/);
+        const task = missionMatch ? missionMatch[1].trim() : "";
+
         const agentsTable = getTableFromSection(md, "Agents");
         const agents = agentsTable?.rows || [];
         const active = agents.filter(a => a["Status"]?.includes("Active")).length;
         const complete = agents.filter(a => a["Status"]?.includes("Complete")).length;
         const pending = agents.filter(a => a["Status"]?.includes("Pending")).length;
 
+        // Determine current phase from agent statuses
+        const activeAgent = agents.find(a => a["Status"]?.includes("Active"));
+        const phase = activeAgent?.Phase || (complete === agents.length ? "done" : "0");
+
         const statusObj = {
+            task,
+            phase,
             supervision,
             agents_active: active,
             agents_complete: complete,
@@ -62,7 +75,7 @@ function writeSwarmStatus(rootDir: string, md: string, lastEvent: string) {
         };
         fs.writeFileSync(path.join(rootDir, "swarm_status.json"), JSON.stringify(statusObj, null, 2));
     } catch (e) {
-        // silently fail status write
+        console.error("[agent-coordinator] Failed to write swarm_status.json:", e);
     }
 }
 
@@ -240,15 +253,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     try {
         if (name === "create_swarm_manifest") {
+            const mission = (args as any)?.mission;
+            if (!mission || typeof mission !== "string") throw new Error("Missing required argument: mission");
+            const supervision = (args as any)?.supervision_level || "Full";
+
             const templatePath = path.join(globalConfigPath, "templates", "swarm-manifest.md");
             if (!fs.existsSync(templatePath)) throw new Error("Template not found");
             let content = fs.readFileSync(templatePath, "utf8");
 
-            const mission = (args as any).mission || "";
-            const supervision = (args as any).supervision_level || "Full";
-
-            content = content.replace("$MISSION", mission);
-            content = content.replace("## Mode\n\n[Supervision Level]", `## Mode\n\n${supervision}`);
+            // Replace placeholders (use split+join to avoid regex special char issues in mission text)
+            content = content.split("$MISSION").join(mission);
+            content = content.split("$TIMESTAMP").join(new Date().toISOString());
+            content = content.replace(/Supervision:\s*\w+/, `Supervision: ${supervision}`);
 
             writeManifest(workspaceRoot, content);
             writeSwarmStatus(workspaceRoot, content, "Swarm initialized");
@@ -264,7 +280,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         if (name === "update_agent_status") {
-            const { agent_id, status } = args as any;
+            const agent_id = (args as any)?.agent_id;
+            const status = (args as any)?.status;
+            if (!agent_id || !status) throw new Error("Missing required arguments: agent_id, status");
             let md = readManifest(workspaceRoot);
             const res = getTableFromSection(md, "Agents");
             if (!res) throw new Error("Agents section not found");
@@ -281,12 +299,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         if (name === "check_phase_gates") {
+            const phaseNum = (args as any)?.phase_number;
+            if (!phaseNum) throw new Error("Missing required argument: phase_number");
             const md = readManifest(workspaceRoot);
             const res = getTableFromSection(md, "Agents");
             if (!res) throw new Error("Agents section not found");
 
-            const phaseNum = (args as any).phase_number;
-            const phaseAgents = res.rows.filter(r => r["Phase"]?.includes(phaseNum));
+            // Use exact match to avoid "1" matching "10", "11", etc.
+            const phaseAgents = res.rows.filter(r => r["Phase"]?.trim() === String(phaseNum).trim());
             if (phaseAgents.length === 0) return { content: [{ type: "text", text: "No agents in this phase." }] };
 
             const allDone = phaseAgents.every(r => r["Status"] === "✅ Complete");
@@ -297,19 +317,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         if (name === "claim_file") {
-            const { agent_id, file_path } = args as any;
+            const agent_id = (args as any)?.agent_id;
+            const file_path = (args as any)?.file_path;
+            if (!agent_id || !file_path) throw new Error("Missing required arguments: agent_id, file_path");
             let md = readManifest(workspaceRoot);
             let res = getTableFromSection(md, "File Claims");
             if (!res) throw new Error("File Claims section not found");
 
             const existing = res.rows.find(r => r["File"] === file_path && !r["Status"]?.includes("Done") && !r["Status"]?.includes("Abandoned"));
             if (existing) {
-                throw new Error(`File ${file_path} is currently claimed by agent ${existing["Agent ID"]} with status ${existing["Status"]}`);
+                throw new Error(`File ${file_path} is currently claimed by agent ${existing["Claimed By"]} with status ${existing["Status"]}`);
             }
 
             res.rows.push({
-                "Agent ID": agent_id,
                 "File": file_path,
+                "Claimed By": agent_id,
                 "Status": "🔄 Active"
             });
 
@@ -329,12 +351,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         if (name === "release_file_claim") {
-            const { agent_id, file_path, status } = args as any;
+            const agent_id = (args as any)?.agent_id;
+            const file_path = (args as any)?.file_path;
+            const status = (args as any)?.status;
+            if (!agent_id || !file_path || !status) throw new Error("Missing required arguments: agent_id, file_path, status");
             let md = readManifest(workspaceRoot);
             const res = getTableFromSection(md, "File Claims");
             if (!res) throw new Error("File Claims section not found");
 
-            const row = res.rows.find(r => r["File"] === file_path && r["Agent ID"] === agent_id && !r["Status"]?.includes("Done"));
+            const row = res.rows.find(r => r["File"] === file_path && r["Claimed By"] === agent_id && !r["Status"]?.includes("Done"));
             if (!row) throw new Error(`Active claim for ${file_path} by ${agent_id} not found`);
             row["Status"] = status;
 
@@ -344,29 +369,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         if (name === "get_agent_prompt") {
-            const { role, mission, scope, agent_id } = args as any;
+            const role = (args as any)?.role;
+            const mission = (args as any)?.mission;
+            const scope = (args as any)?.scope;
+            const agent_id = (args as any)?.agent_id;
+            if (!role || !mission || !scope || !agent_id) throw new Error("Missing required arguments: role, mission, scope, agent_id");
+
+            // Guard against path traversal: role must be alphanumeric + hyphens only
+            if (!/^[a-z0-9-]+$/i.test(role)) throw new Error(`Invalid role name: ${role}`);
+
             const promptPath = path.join(globalConfigPath, "templates", "agent-prompts", `${role}.md`);
-            if (!fs.existsSync(promptPath)) throw new Error(`Prompt template for ${role} not found at ${promptPath}`);
+            if (!fs.existsSync(promptPath)) throw new Error(`Prompt template for ${role} not found`);
 
             let prompt = fs.readFileSync(promptPath, "utf8");
-            prompt = prompt.replace(/\$MISSION/g, mission || "");
-            prompt = prompt.replace(/\$SCOPE/g, scope || "");
-            prompt = prompt.replace(/\$AGENT_ID/g, agent_id || "");
+            // Use split+join to avoid regex special char issues in user-provided text
+            prompt = prompt.split("$MISSION").join(mission);
+            prompt = prompt.split("$SCOPE").join(scope);
+            prompt = prompt.split("$AGENT_ID").join(agent_id);
 
             return { toolResult: prompt, content: [{ type: "text", text: prompt }] };
         }
 
         if (name === "report_issue") {
-            const { severity, area, description, reporter } = args as any;
+            const severity = (args as any)?.severity;
+            const description = (args as any)?.description;
+            const reporter = (args as any)?.reporter;
+            if (!severity || !description || !reporter) throw new Error("Missing required arguments: severity, description, reporter");
+            const area = (args as any)?.area || "";
             let md = readManifest(workspaceRoot);
             const res = getTableFromSection(md, "Issues");
             if (!res) throw new Error("Issues section not found");
 
             res.rows.push({
                 "Severity": severity,
-                "Area/File": area || "",
+                "File/Area": area,
                 "Description": description,
-                "Reporter": reporter || ""
+                "Reported By": reporter
             });
 
             md = replaceTableInSection(md, "Issues", serializeTableToString(res.headers, res.rows))!;
