@@ -8,7 +8,8 @@ $MISSION
 ## Before You Start
 1. Read `swarm-manifest.md` in the project root
 2. Find your agent row (ID: `$AGENT_ID`) and update status to `🔄 Active`
-3. Read the coordination rules from the `agent-coordination` skill
+3. Read `spec.md` to understand acceptance criteria and constraints
+4. Read the coordination rules from the `agent-coordination` skill
 
 ## Your Scope
 - You MAY create/edit: `plan.md`, `docs/*.md`, and notes in the manifest

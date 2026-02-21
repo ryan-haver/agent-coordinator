@@ -9,7 +9,8 @@ $MISSION
 1. Read `swarm-manifest.md` in the project root
 2. Find your agent row (ID: `$AGENT_ID`) and update status to `🔄 Active`
 3. Read `plan.md` to understand the intended changes
-4. Read the coordination rules from the `agent-coordination` skill
+4. Read `spec.md` to understand acceptance criteria for review
+5. Read the coordination rules from the `agent-coordination` skill
 
 ## Your Scope
 - You MAY read: everything in the codebase

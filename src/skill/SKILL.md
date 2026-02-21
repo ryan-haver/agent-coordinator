@@ -22,11 +22,11 @@ Read exact model names from `~/.antigravity-configs/model_fallback.json`. Curren
 
 | Tier | Models | Role | Best For |
 |------|--------|------|----------|
-| 1 | Claude Opus (Thinking), Claude Sonnet (Thinking) | **The Architect** | Deep reasoning, architecture, subtle debugging |
-| 1 | Claude Sonnet 4.5 | **The Precision Specialist** | Code review, plan alignment, security analysis |
-| 2 | Gemini 3 Pro (High/Low) | **The Context King** | Large context, multi-file implementation, refactoring |
-| 2 | GPT-OSS 120B | **The Alternative** | Alternative reasoning, diverse perspective |
-| 3 | Gemini 3 Flash | **The Speed Specialist** | Fast iteration, simple tasks, docs, formatting |
+| 1 | Claude (Opus, Sonnet) | **The Architect** | Deep reasoning, architecture, subtle debugging |
+| 1 | Claude (Sonnet) | **The Precision Specialist** | Code review, plan alignment, security analysis |
+| 2 | Gemini Pro (High/Low) | **The Context King** | Large context, multi-file implementation, refactoring |
+| 2 | GPT-OSS | **The Alternative** | Alternative reasoning, diverse perspective |
+| 3 | Gemini Flash | **The Speed Specialist** | Fast iteration, simple tasks, docs, formatting |
 
 > [!NOTE]
 > Model versions change over time. Always check `model_fallback.json` for the exact model selector names.
@@ -253,6 +253,7 @@ When an agent is stuck (3+ attempts failed), before a full handoff:
 |------|----------|
 | Handoff manifest template | `~/.antigravity-configs/templates/handoff_manifest.md` |
 | Swarm manifest template | `~/.antigravity-configs/templates/swarm-manifest.md` |
+| Spec template | `~/.antigravity-configs/templates/spec.md` |
 | Agent prompt templates | `~/.antigravity-configs/templates/agent-prompts/*.md` |
 | Active handoff manifest | `~/.antigravity-configs/handoff_active.md` |
 | Model fallback config | `~/.antigravity-configs/model_fallback.json` |

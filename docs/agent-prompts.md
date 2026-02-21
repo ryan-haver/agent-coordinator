@@ -12,6 +12,8 @@ Each prompt template uses placeholder variables that get filled in by the coordi
 | `$AGENT_ID` | Greek letter identifier (α, β, γ, etc.) | Coordinator (from agent plan) |
 | `$SCOPE` | Directories/files this agent may edit | Coordinator (from scope analysis) |
 
+> **Convention:** Agent prompts and swarm templates use `$VAR` style (simple substitution by the coordinator). Handoff manifests and rules use `{{VAR}}` style (filled at runtime by the active model). Both are plain-text placeholders — neither is programmatically parsed.
+
 ## Prompt Structure
 
 All agent prompts follow a consistent structure:

@@ -10,6 +10,9 @@ A unified multi-agent coordination system for Antigravity where model-shifting i
 
 Sourced from [Antigravity Cockpit](https://github.com/jlcodes99/vscode-antigravity-cockpit) extension.
 
+> [!NOTE]
+> The tables below are illustrative snapshots. For exact, current model names used by the system, see `src/model_fallback.json` — that file is the single source of truth.
+
 | Label | Internal ID | Tier | Best For |
 |-------|-------------|------|----------|
 | Claude Opus 4.5 (Thinking) | `MODEL_PLACEHOLDER_M12` | 1 — Architect | Deep reasoning, architecture, subtle debugging |

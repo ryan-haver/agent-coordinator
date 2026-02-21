@@ -17,7 +17,16 @@
 set -euo pipefail
 
 FORCE=false
-[ "${1:-}" = "--force" ] && FORCE=true
+for arg in "$@"; do
+    case "$arg" in
+        --force) FORCE=true ;;
+        --help|-h)
+            echo "Usage: ./install.sh [--force]"
+            echo "  --force   Update GEMINI.md and gitignore even if already present"
+            exit 0
+            ;;
+    esac
+done
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 SRC="$ROOT/src"
@@ -40,7 +49,8 @@ mkdir -p "$(dirname "$GEMINI_DST")"
 if [ -f "$GEMINI_DST" ]; then
     if grep -q "Agent Coordination\|Smart Handoff" "$GEMINI_DST" 2>/dev/null; then
         if [ "$FORCE" = true ]; then
-            sed -i.bak '/^# \(Agent Coordination System\|Global Smart Handoff\)/,/^# [^#]/{/^# [^#]/!d;}' "$GEMINI_DST"
+            # Remove old coordination section (handles both mid-file and end-of-file positions)
+            sed -i.bak '/^# \(Agent Coordination System\|Agent Coordinator\|Global Smart Handoff\)/,${/^# \(Agent Coordination System\|Agent Coordinator\|Global Smart Handoff\)/!{/^# [^#]/!d;}}' "$GEMINI_DST"
             sed -i.bak -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$GEMINI_DST"
             rm -f "${GEMINI_DST}.bak"
             echo "" >> "$GEMINI_DST"
@@ -79,7 +89,7 @@ done
 
 # 4. Configs
 CFG_DST="$HOME_DIR/.antigravity-configs"
-mkdir -p "$CFG_DST/rules" "$CFG_DST/templates/agent-prompts" "$CFG_DST/workflows"
+mkdir -p "$CFG_DST/rules" "$CFG_DST/templates/agent-prompts"
 
 cp "$SRC/model_fallback.json" "$CFG_DST/model_fallback.json"
 echo "  ✅ Config: model_fallback.json"
@@ -126,7 +136,8 @@ mkdir -p "$(dirname "$GI_DST")"
 if [ -f "$GI_DST" ]; then
     if grep -q "Agent Coordination\|Smart Handoff" "$GI_DST" 2>/dev/null; then
         if [ "$FORCE" = true ]; then
-            sed -i.bak '/^# \(Agent Coordinator\|Smart Handoff\)/,/^# [^#]/{/^# [^#]/!d;}' "$GI_DST"
+            # Remove old coordination section (handles both mid-file and end-of-file positions)
+            sed -i.bak '/^# \(Agent Coordinator\|Agent Coordination\|Smart Handoff\)/,${/^# \(Agent Coordinator\|Agent Coordination\|Smart Handoff\)/!{/^# [^#]/!d;}}' "$GI_DST"
             sed -i.bak -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$GI_DST"
             rm -f "${GI_DST}.bak"
             echo "" >> "$GI_DST"

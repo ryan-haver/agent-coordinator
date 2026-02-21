@@ -21,7 +21,7 @@ if (Test-Path $gemini) {
     $content = Get-Content $gemini -Raw -ErrorAction SilentlyContinue
     if ($content -and ($content -match "Agent Coordination" -or $content -match "Smart Handoff")) {
         # Remove coordination block (either old or new naming)
-        $cleaned = $content -replace '(?ms)\r?\n?# (Agent Coordination System|Global Smart Handoff).*?(?=\r?\n# [^#]|\z)', ''
+        $cleaned = $content -replace '(?ms)\r?\n?# (Agent Coordination System|Agent Coordinator|Global Smart Handoff).*?(?=\r?\n# [^#]|\z)', ''
         $cleaned = $cleaned.Trim()
         if ($cleaned) { Set-Content $gemini $cleaned } else { Set-Content $gemini "" }
         Write-Host "  ✅ Removed coordination block from GEMINI.md" -ForegroundColor Green

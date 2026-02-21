@@ -19,7 +19,8 @@ echo ""
 GEMINI="$HOME_DIR/.gemini/GEMINI.md"
 if [ -f "$GEMINI" ]; then
     if grep -q "Agent Coordination\|Smart Handoff" "$GEMINI" 2>/dev/null; then
-        sed -i.bak '/^# \(Agent Coordination System\|Global Smart Handoff\)/,/^# [^#]/{/^# [^#]/!d;}' "$GEMINI"
+        # Remove coordination section (handles both mid-file and end-of-file positions)
+        sed -i.bak '/^# \(Agent Coordination System\|Agent Coordinator\|Global Smart Handoff\)/,${/^# \(Agent Coordination System\|Agent Coordinator\|Global Smart Handoff\)/!{/^# [^#]/!d;}}' "$GEMINI"
         sed -i.bak -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$GEMINI"
         rm -f "${GEMINI}.bak"
         echo "  ✅ Removed coordination block from GEMINI.md"

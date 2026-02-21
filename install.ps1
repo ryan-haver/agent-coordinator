@@ -16,13 +16,22 @@
     Use -Force to update GEMINI.md and gitignore even if already present.
 #>
 
-param([switch]$Force)
+param(
+    [switch]$Force,
+    [switch]$Help
+)
+
+if ($Help) {
+    Get-Help $MyInvocation.MyCommand.Path -Detailed
+    return
+}
+
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 $src = Join-Path $root "src"
 $home_ = $env:USERPROFILE
 
-Write-Host "Agent Coordinator - Installing..." -ForegroundColor Cyan
+Write-Host "[Agent Coordinator] Installing..." -ForegroundColor Cyan
 Write-Host ""
 
 # 0. Clean up old skill directory (smart-handoff -> agent-coordination)
@@ -40,7 +49,7 @@ if (Test-Path $geminiDst) {
     $existing = Get-Content $geminiDst -Raw -ErrorAction SilentlyContinue
     if ($existing -and ($existing -match "Agent Coordination" -or $existing -match "Smart Handoff")) {
         if ($Force) {
-            $cleaned = $existing -replace '(?ms)\r?\n?# (Agent Coordination System|Global Smart Handoff).*?(?=\r?\n# [^#]|\z)', ''
+            $cleaned = $existing -replace '(?ms)\r?\n?# (Agent Coordination System|Agent Coordinator|Global Smart Handoff).*?(?=\r?\n# [^#]|\z)', ''
             $cleaned = $cleaned.Trim()
             $coordContent = Get-Content $geminiSrc -Raw
             if ($cleaned) { Set-Content $geminiDst "$cleaned`n`n$coordContent" } else { Set-Content $geminiDst $coordContent }
@@ -84,7 +93,7 @@ foreach ($wf in @("pivot.md", "resume.md", "health.md", "swarm.md", "swarm-auto.
 
 # 4. Configs
 $cfgDst = Join-Path $home_ ".antigravity-configs"
-New-Item -ItemType Directory -Force -Path "$cfgDst\rules", "$cfgDst\templates\agent-prompts", "$cfgDst\workflows" | Out-Null
+New-Item -ItemType Directory -Force -Path "$cfgDst\rules", "$cfgDst\templates\agent-prompts" | Out-Null
 
 Copy-Item (Join-Path $src "model_fallback.json") "$cfgDst\model_fallback.json" -Force
 Write-Host "  Config: model_fallback.json" -ForegroundColor Green
