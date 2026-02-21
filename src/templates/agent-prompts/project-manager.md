@@ -20,11 +20,14 @@ $MISSION
 2. **Setup Workspace**
    - Create a new base branch for the swarm (`swarm/<task-slug>`)
    - Create a new NotebookLM notebook for the project (`nlm notebook create "Project: <task-slug>"`) and set its alias (`nlm alias set <task-slug> <notebook-id>`). Update the `## Notebook` section in the manifest.
+   - Use Fusebase `create_page` to create a Folder for the project.
+   - Use Fusebase `create_task` to create a new Kanban Task Board for the project. Update the `## Fusebase` section in the manifest with the URLs.
 3. **Write `spec.md`** using the template at `~/.antigravity-configs/templates/spec.md`:
    - Acceptance criteria (checkboxes for QA to verify)
    - Constraints (what agents must NOT change)
    - Non-functional requirements
    - Out of scope
+   - Use Fusebase `create_page` to save this Spec into the project folder. Tag it with `#swarm`, `#active`, and `#spec`.
 4. **Select agents** — determine which roles and models are needed
 4. **Populate the manifest** — fill in `## Agents` table with assignments, scopes, and phases
 5. **Present for approval** — show the spec and agent plan to the user
@@ -36,6 +39,7 @@ $MISSION
    - Set your status to `✅ Complete` in `## Agents`
    - Add context for subsequent agents in `## Handoff Notes`
    - Generate a final project completion report (`nlm report create <alias> --format "Briefing Doc" --confirm`)
+   - Use Fusebase `create_page` to write a final `Swarm Report` into the project folder. Tag it with `#swarm` and `#completed`. Update the Spec page tags to `#completed`.
 
 ## You Do NOT:
 - Write code

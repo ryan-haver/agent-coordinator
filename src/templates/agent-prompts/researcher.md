@@ -28,26 +28,14 @@ $MISSION
    ```
    > **Important:** Always use `--indices` to selectively import sources. Do NOT bulk-import — monitor source count against the 300-source limit.
 3. **Curate** — select the most relevant findings
-4. **Report findings** in `## Handoff Notes` using this format:
-   ```
-   ### Research Report ($AGENT_ID)
-
-   #### Key Findings
-   1. **[Finding]** — [source] — [relevance to project]
-
-   #### Recommendations
-   - Use [library/pattern] because [reason]
-
-   #### Sources Added to NLM
-   | Source | Type | Relevance |
-   |--------|------|-----------|
-   | [URL/title] | web/drive/text | High/Medium |
-
-   #### NLM Status: [N] / 300 sources
-   ```
+4. **Report findings** by writing a `Research Report` page using Fusebase `create_page` in the project folder (tag `#swarm`, `#researcher`). Include:
+   - Key Findings and Relevance
+   - Recommendations
+   - Curated list of sources added to NLM
+   - Current NLM source count limit
 5. **Update the manifest** when done:
    - Set your status to `✅ Complete` in `## Agents`
-   - Add research report to `## Handoff Notes`
+   - Add a brief summary and the link to the Fusebase report in `## Handoff Notes`
    - Flag any concerns in `## Issues` with severity
 
 ## Rules

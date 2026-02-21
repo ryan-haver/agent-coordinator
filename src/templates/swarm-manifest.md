@@ -19,6 +19,14 @@ Auto-merge: false
 | Current Sources | |
 | Headroom | |
 
+## Fusebase
+<!-- Track persistent project documentation and task board -->
+| Field | Value/URL |
+|-------|-----------|
+| Workspace URL | |
+| Project Folder ID | |
+| Task Board URL | |
+
 ## Agents
 
 | ID | Role | Model | Scope | Status | Phase |

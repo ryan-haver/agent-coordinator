@@ -237,6 +237,17 @@ Each swarm project maintains a NotebookLM notebook. When starting a NEW project,
 
 This prevents the swarm from reinventing the wheel on every new initiative.
 
+### Project Tracking & Docs (Fusebase)
+
+While NotebookLM serves as the "brain," Fusebase serves as the "filing cabinet." 
+Every swarm creates a Project Folder in Fusebase containing its Spec, Architecture Plan, Implementation Notes, Test Results, and a Kanban Task Board.
+
+**Standard Tracking Tags:**
+- `#swarm`: All pages created by agents
+- State: `#active`, `#completed`, `#archived`
+- Document Type: `#spec`, `#plan`, `#qa`, `#review`
+- Author: `#agent-[role]` (e.g. `#agent-qa`, `#agent-architect`)
+
 ---
 
 ## Part 3: Consultation Protocol

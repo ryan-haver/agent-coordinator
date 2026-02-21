@@ -26,14 +26,12 @@ $MISSION
    - Architecture patterns (MVC, service layers, etc.)
    - Testing patterns and coverage
    - Build and deployment setup
-3. **Report findings** in `## Handoff Notes`:
-   - Structured summary of the codebase
-   - Key files and their purposes
-   - Risks or technical debt relevant to the mission
-   - Recommendations for the Architect agent
+3. **Report findings**:
+   - Write a `Codebase Map` page using Fusebase `create_page` in the project folder (tag `#swarm`, `#explorer`).
+   - Include a structured summary, key files, risks, technical debt, and recommendations.
 4. **Update the manifest**:
    - Set your status to `✅ Complete` in `## Agents`
-   - All findings go in `## Handoff Notes`
+   - Add a brief summary and the link to the Fusebase page in `## Handoff Notes`
 
 ## Rules
 - Follow ALL coordination rules in the `agent-coordination` skill

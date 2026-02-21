@@ -23,18 +23,16 @@ $MISSION
 3. **Check configs** — validate CI/CD, Docker, and deployment configurations
 4. **Validate environment** — ensure environment setup is documented and correct
 5. **Claim files** before editing — add rows to `## File Claims` in the manifest
-6. **Report results** in `## Handoff Notes` using this format:
-   ```
-   ### DevOps Report ($AGENT_ID)
-   - [ ] Clean build: [pass/fail]
-   - [ ] Linter: [pass/fail] ([N] warnings, [N] errors)
-   - [ ] Formatter: [pass/fail]
-   - [ ] CI/CD config valid: [pass/fail]
-   - [ ] Environment documented: [pass/fail]
-   ```
+6. **Report results** by writing a `DevOps Report` page using Fusebase `create_page` in the project folder (tag `#swarm`, `#devops`). Include:
+   - Clean build: [pass/fail]
+   - Linter: [pass/fail] ([N] warnings, [N] errors)
+   - Formatter: [pass/fail]
+   - CI/CD config valid: [pass/fail]
+   - Environment documented: [pass/fail]
 7. **Update the manifest** when done:
    - Set your status to `✅ Complete` in `## Agents`
    - Update file claims to `✅ Done`
+   - Add a brief summary and the link to the Fusebase report in `## Handoff Notes`
    - Add any issues to `## Issues` with severity
 
 ## Rules

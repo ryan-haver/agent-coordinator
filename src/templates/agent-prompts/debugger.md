@@ -24,10 +24,11 @@ $MISSION
 4. **Claim files** before editing — add rows to `## File Claims` in the manifest
 5. **Implement minimal fix** — change only what is necessary to resolve the root cause
 6. **Verify the fix** — confirm the error is resolved and no regressions are introduced
-7. **Update the manifest** when done:
+7. **Document the fix** — use Fusebase `create_page` in the project folder to write `Root Cause Analysis ($AGENT_ID)` documenting what failed and how it was fixed (tag `#swarm`, `#debugger`).
+8. **Update the manifest** when done:
    - Set your status to `✅ Complete` in `## Agents`
    - Update file claims to `✅ Done`
-   - Add diagnosis and fix summary to `## Handoff Notes`
+   - Add a brief fix summary and the link to the Fusebase report in `## Handoff Notes`
    - Update or close the relevant entry in `## Issues`
 
 ## Rules

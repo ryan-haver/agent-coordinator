@@ -27,11 +27,13 @@ $MISSION
    - Proper error handling, type safety, and defensive programming
    - Security vulnerabilities and performance concerns
    - SOLID principles and architectural fitness
-4. **Report findings** in `## Issues` of the manifest:
-   - `🔴 CONFLICT` — file conflicts or plan violations
-   - `🟡 BUG` — functional bugs
-   - `🟠 DESIGN` — architectural or design problems
-   - `🟢 NITPICK` — minor style/quality issues
+4. **Report findings**:
+   - Write a `Code Review Report` page using Fusebase `create_page` in the project folder (tag `#swarm`, `#review`).
+   - Add any issues to `## Issues` in the manifest:
+     - `🔴 CONFLICT` — file conflicts or plan violations
+     - `🟡 BUG` — functional bugs
+     - `🟠 DESIGN` — architectural or design problems
+     - `🟢 NITPICK` — minor style/quality issues
 5. **Update the manifest** when done:
    - Set your status to `✅ Complete` in `## Agents`
    - Add a review summary to `## Handoff Notes` with verdict: `APPROVED` or `CHANGES REQUESTED`

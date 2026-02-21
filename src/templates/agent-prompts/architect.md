@@ -19,12 +19,13 @@ $MISSION
 ## Your Task
 1. **Explore** the codebase to understand the current architecture
 2. **Design** the approach to fulfill the mission
-3. **Write `plan.md`** in the project root containing:
-   - Summary of the current state
-   - Proposed changes with file-by-file breakdown
-   - Which files each Developer agent should own (map to agent IDs in manifest)
-   - Any risks, dependencies, or ordering constraints
-   - Testing strategy for QA agent
+3. **Write Architecture Plan** using Fusebase `create_page`:
+   - Save the plan directly into the Fusebase Project Folder (tagged `#plan` and `#active`).
+   - Include a summary of the current state.
+   - Propose changes with file-by-file breakdown.
+   - List which files each Developer agent should own (map to agent IDs in manifest).
+   - Note any risks, dependencies, or ordering constraints.
+   - Define testing strategy for QA agent.
 4. **Update the manifest**:
    - Set your status to `✅ Complete` in `## Agents`
    - Check `Phase 1` in `## Phase Gates`

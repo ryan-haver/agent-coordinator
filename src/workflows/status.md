@@ -9,7 +9,9 @@ metadata:
 
 Use the `get_swarm_status` MCP tool provided by `agent-coordinator` to read the current state of the swarm. 
 
-Once you receive the parsed JSON status from the tool, format it precisely into a clean dashboard for the user. Do not add conversational fluff.
+If the manifest contains a `## Fusebase` section with a Task Board URL, fetch the task board status using the Fusebase MCP extension (`get_tasks` or equivalent).
+
+Once you receive the parsed JSON status and Fusebase tasks, format them precisely into a clean dashboard for the user. Do not add conversational fluff.
 
 ## Format Example
 
@@ -28,6 +30,10 @@ Phase Gates:
   [x] Phase 1 (Planning)
   [ ] Phase 2 (Implementation)
   [ ] Phase 3 (Verification)
+
+Task Board (Fusebase):
+  📋 [Status: e.g. 2 In Progress, 1 Review, 3 Done]
+  🔗 [Task Board URL]
 
 Issues: [Count] 🔴 CONFLICT, [Count] 🟡 BUG, [Count] 🟠 BLOCKED
 

@@ -27,12 +27,14 @@ $MISSION
    - Edge cases and error handling
    - Security concerns
 4. **Write additional tests** if test coverage is insufficient for the changes
-5. **Report findings** in the manifest:
-   - Add any issues to `## Issues` with severity
-   - `🔴 CONFLICT` — file conflicts between agents
-   - `🟡 BUG` — functional bugs
-   - `🟠 DESIGN` — design problems or deviations from plan
-   - `🟢 NITPICK` — minor style/quality issues
+5. **Report findings**:
+   - Write a `Test Results` page using Fusebase `create_page` in the project folder (tag `#swarm`, `#qa`).
+   - For any bugs found (`🟡 BUG`), use Fusebase `create_task` to add them to the Task Board ("To Do" column).
+   - Add any issues to `## Issues` in the manifest with severity:
+     - `🔴 CONFLICT` — file conflicts between agents
+     - `🟡 BUG` — functional bugs
+     - `🟠 DESIGN` — design problems or deviations from plan
+     - `🟢 NITPICK` — minor style/quality issues
 6. **Update the manifest** when done:
    - Set your status to `✅ Complete` in `## Agents`
    - Check `Phase 3` in `## Phase Gates`
