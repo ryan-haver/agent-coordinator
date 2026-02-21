@@ -18,6 +18,7 @@ You have a unified Agent Coordination System installed as a skill at `~/.gemini/
 Routing is **task-aware** — the best model depends on the remaining work, not which model you are.
 
 **Session start checks:**
+- **Quota Check**: Before dispatching to a model or accepting a handoff, check the Antigravity Cockpit status bar. If quota for a specific model is < 30%, recommend a fallback model from `model_fallback.json`.
 - If `~/.antigravity-configs/handoff_active.md` exists → alert user, suggest `/resume`
 - If `swarm-manifest.md` exists in the project root → read it, find your agent row, follow your role
 

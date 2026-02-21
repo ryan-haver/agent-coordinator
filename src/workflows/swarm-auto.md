@@ -35,8 +35,9 @@ Extract the following from $ARGUMENTS, matching the logic of the standard `/swar
 2. Determine the agent roster based on the `Task` and `Preset`, grouping them into logical Execution Phases.
 3. If `--auto` is specified:
    - YOU MUST run the `auto_mode_toggle` script (located in `~/.gemini/antigravity/skills/agent-coordination/scripts/auto_mode_toggle.[ps1|sh]`) to backup and enable autonomous Antigravity settings.
-4. Call MCP tool `create_swarm_manifest` with the `mission` and `supervision_level`.
-5. Present the swarm plan for confirmation (ONLY IF Level 1 or 2 is used). If Level 3 or 4, proceed immediately.
+4. **Quota Pre-check**: Prompt the user to check their Antigravity Cockpit status bar and provide the current quota percentages for the selected models.
+5. Call MCP tool `create_swarm_manifest` with the `mission` and `supervision_level`, explicitly populating the `## Quota Check` table in the manifest with the provided percentages.
+6. Present the swarm plan for confirmation (ONLY IF Level 1 or 2 is used). If Level 3 or 4, proceed immediately.
 
 ```
 ⚡ Rapid Swarm for: [task summary]

@@ -9,6 +9,14 @@ $MISSION
 Supervision: supervised
 Auto-merge: false
 
+## Quota Check
+<!-- Snapshot of Antigravity Cockpit quotas at swarm start -->
+| Model | Quota (%) |
+|-------|-----------|
+| Claude (Tier 1) | |
+| Gemini Pro (Tier 2) | |
+| Gemini Flash (Tier 3) | |
+
 ## Notebook
 <!-- Track NotebookLM usage and source limits -->
 | Field | Value |

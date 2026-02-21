@@ -41,6 +41,31 @@ function getModelsConfigPath(): string {
     return "";
 }
 
+function writeSwarmStatus(rootDir: string, md: string, lastEvent: string) {
+    try {
+        const modeSection = md.match(/Supervision:\s*(\w+)/);
+        const supervision = modeSection ? modeSection[1] : "unknown";
+
+        const agentsTable = getTableFromSection(md, "Agents");
+        const agents = agentsTable?.rows || [];
+        const active = agents.filter(a => a["Status"]?.includes("Active")).length;
+        const complete = agents.filter(a => a["Status"]?.includes("Complete")).length;
+        const pending = agents.filter(a => a["Status"]?.includes("Pending")).length;
+
+        const statusObj = {
+            supervision,
+            agents_active: active,
+            agents_complete: complete,
+            agents_pending: pending,
+            last_event: lastEvent,
+            timestamp: new Date().toISOString()
+        };
+        fs.writeFileSync(path.join(rootDir, "swarm_status.json"), JSON.stringify(statusObj, null, 2));
+    } catch (e) {
+        // silently fail status write
+    }
+}
+
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
     return {
         resources: [
@@ -226,6 +251,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             content = content.replace("## Mode\n\n[Supervision Level]", `## Mode\n\n${supervision}`);
 
             writeManifest(workspaceRoot, content);
+            writeSwarmStatus(workspaceRoot, content, "Swarm initialized");
             return { toolResult: "Manifest created successfully.", content: [{ type: "text", text: "Manifest created successfully." }] };
         }
 
@@ -250,6 +276,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const newTable = serializeTableToString(res.headers, res.rows);
             md = replaceTableInSection(md, "Agents", newTable)!;
             writeManifest(workspaceRoot, md);
+            writeSwarmStatus(workspaceRoot, md, `Agent ${agent_id} status updated to ${status}`);
             return { toolResult: `Agent ${agent_id} status updated to ${status}`, content: [{ type: "text", text: `Agent ${agent_id} status updated to ${status}` }] };
         }
 
