@@ -13,6 +13,13 @@ import {
     readManifest,
     writeManifest
 } from "./utils/manifest.js";
+import {
+    readAgentProgress,
+    writeAgentProgress,
+    createAgentProgress,
+    readAllAgentProgress,
+    AgentProgress
+} from "./utils/agent-progress.js";
 import path from "path";
 import os from "os";
 import fs from "fs";
@@ -20,9 +27,37 @@ import fs from "fs";
 // Read version from package.json at startup
 const PKG = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')), '..', '..', 'package.json'), 'utf8'));
 
-// Determine workspace root. Since this server runs in the context of the workspace, CWD is usually correct, or we take a fallback.
-const workspaceRoot = process.cwd();
 const globalConfigPath = path.join(os.homedir(), ".antigravity-configs");
+
+/**
+ * Resolve the workspace root directory using multiple strategies.
+ * Called lazily per-request (not at startup) so the CWD at server
+ * launch time doesn't lock us into a wrong directory.
+ */
+function resolveWorkspaceRoot(args?: Record<string, unknown>): string {
+    // Strategy 1: Explicit argument override (highest priority)
+    if (args?.workspace_root && typeof args.workspace_root === "string") {
+        return args.workspace_root;
+    }
+
+    // Strategy 2: Environment variable (set by Antigravity extension)
+    if (process.env.ANTIGRAVITY_WORKSPACE) {
+        return process.env.ANTIGRAVITY_WORKSPACE;
+    }
+
+    // Strategy 3: Walk up from CWD looking for swarm-manifest.md
+    let dir = process.cwd();
+    const root = path.parse(dir).root;
+    while (dir !== root) {
+        if (fs.existsSync(path.join(dir, 'swarm-manifest.md'))) {
+            return dir;
+        }
+        dir = path.dirname(dir);
+    }
+
+    // Strategy 4: Fall back to CWD (original behavior)
+    return process.cwd();
+}
 
 const server = new Server(
     {
@@ -107,7 +142,8 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     if (request.params.uri === "manifest://current") {
         try {
-            const content = readManifest(workspaceRoot);
+            const wsRoot = resolveWorkspaceRoot();
+            const content = readManifest(wsRoot);
             return {
                 contents: [{ uri: request.params.uri, mimeType: "text/markdown", text: content }]
             };
@@ -139,7 +175,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                     type: "object",
                     properties: {
                         mission: { type: "string", description: "The overarching goal of the swarm" },
-                        supervision_level: { type: "string", description: "Supervision level (e.g. gates, full, auto)" }
+                        supervision_level: { type: "string", description: "Supervision level (e.g. gates, full, auto)" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
                     },
                     required: ["mission"]
                 }
@@ -150,7 +187,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 inputSchema: {
                     type: "object",
                     properties: {
-                        section: { type: "string", description: "The section heading (e.g., Agents, File Claims, Issues)" }
+                        section: { type: "string", description: "The section heading (e.g., Agents, File Claims, Issues)" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
                     },
                     required: ["section"]
                 }
@@ -162,7 +200,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                     type: "object",
                     properties: {
                         agent_id: { type: "string", description: "The agent id (e.g. α, β)" },
-                        status: { type: "string", description: "New status like '✅ Complete', '🔄 Active', '⏳ Pending'" }
+                        status: { type: "string", description: "New status like '✅ Complete', '🔄 Active', '⏳ Pending'" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
                     },
                     required: ["agent_id", "status"]
                 }
@@ -173,7 +212,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 inputSchema: {
                     type: "object",
                     properties: {
-                        phase_number: { type: "string", description: "Phase number to check" }
+                        phase_number: { type: "string", description: "Phase number to check" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
                     },
                     required: ["phase_number"]
                 }
@@ -185,7 +225,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                     type: "object",
                     properties: {
                         agent_id: { type: "string" },
-                        file_path: { type: "string" }
+                        file_path: { type: "string" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
                     },
                     required: ["agent_id", "file_path"]
                 }
@@ -196,7 +237,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 inputSchema: {
                     type: "object",
                     properties: {
-                        file_path: { type: "string" }
+                        file_path: { type: "string" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
                     },
                     required: ["file_path"]
                 }
@@ -209,7 +251,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                     properties: {
                         agent_id: { type: "string" },
                         file_path: { type: "string" },
-                        status: { type: "string", description: "Status e.g. '✅ Done'" }
+                        status: { type: "string", description: "Status e.g. '✅ Done'" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
                     },
                     required: ["agent_id", "file_path", "status"]
                 }
@@ -237,7 +280,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                         severity: { type: "string", description: "e.g. 🔴 BLOCKED, 🟡 BUG" },
                         area: { type: "string" },
                         description: { type: "string" },
-                        reporter: { type: "string" }
+                        reporter: { type: "string" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
                     },
                     required: ["severity", "description", "reporter"]
                 }
@@ -247,7 +291,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 description: "Return a structured status summary across all agents and phase gates",
                 inputSchema: {
                     type: "object",
-                    properties: {}
+                    properties: {
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    }
                 }
             }
         ]
@@ -272,13 +318,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             content = content.split("$TIMESTAMP").join(new Date().toISOString());
             content = content.replace(/Supervision:\s*\w+/, `Supervision: ${supervision}`);
 
-            writeManifest(workspaceRoot, content);
-            writeSwarmStatus(workspaceRoot, content, "Swarm initialized");
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            writeManifest(wsRoot, content);
+            writeSwarmStatus(wsRoot, content, "Swarm initialized");
             return { toolResult: "Manifest created successfully.", content: [{ type: "text", text: "Manifest created successfully." }] };
         }
 
         if (name === "read_manifest_section") {
-            const md = readManifest(workspaceRoot);
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            const md = readManifest(wsRoot);
             const section = (args as any)?.section;
             if (!section || typeof section !== "string") throw new Error("Missing required argument: section");
             const res = getTableFromSection(md, section);
@@ -290,27 +338,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const agent_id = (args as any)?.agent_id;
             const status = (args as any)?.status;
             if (!agent_id || !status) throw new Error("Missing required arguments: agent_id, status");
-            let md = readManifest(workspaceRoot);
-            const res = getTableFromSection(md, "Agents");
-            if (!res) throw new Error("Agents section not found");
+            const wsRoot = resolveWorkspaceRoot(args as any);
 
-            const row = res.rows.find(r => r["ID"] === agent_id);
-            if (!row) throw new Error(`Agent ID ${agent_id} not found`);
-            row["Status"] = status;
+            // Write to per-agent progress file (concurrency-safe)
+            let progress = readAgentProgress(wsRoot, agent_id);
+            if (!progress) {
+                // Agent file doesn't exist yet — read role/phase from manifest
+                const md = readManifest(wsRoot);
+                const res = getTableFromSection(md, "Agents");
+                const row = res?.rows.find(r => r["ID"] === agent_id);
+                progress = createAgentProgress(agent_id, row?.["Role"] || "unknown", row?.["Phase"] || "1");
+            }
+            progress.status = status;
+            writeAgentProgress(wsRoot, progress);
 
-            const newTable = serializeTableToString(res.headers, res.rows);
-            const updated = replaceTableInSection(md, "Agents", newTable);
-            if (!updated) throw new Error("Failed to replace Agents table — section may be malformed");
-            md = updated;
-            writeManifest(workspaceRoot, md);
-            writeSwarmStatus(workspaceRoot, md, `Agent ${agent_id} status updated to ${status}`);
-            return { toolResult: `Agent ${agent_id} status updated to ${status}`, content: [{ type: "text", text: `Agent ${agent_id} status updated to ${status}` }] };
+            return { toolResult: `Agent ${agent_id} status updated to ${status}`, content: [{ type: "text", text: `Agent ${agent_id} status updated to ${status} (written to agent progress file)` }] };
         }
 
         if (name === "check_phase_gates") {
             const phaseNum = (args as any)?.phase_number;
             if (!phaseNum) throw new Error("Missing required argument: phase_number");
-            const md = readManifest(workspaceRoot);
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            const md = readManifest(wsRoot);
             const res = getTableFromSection(md, "Agents");
             if (!res) throw new Error("Agents section not found");
 
@@ -329,37 +378,65 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const agent_id = (args as any)?.agent_id;
             const file_path = (args as any)?.file_path;
             if (!agent_id || !file_path) throw new Error("Missing required arguments: agent_id, file_path");
-            let md = readManifest(workspaceRoot);
-            let res = getTableFromSection(md, "File Claims");
-            if (!res) throw new Error("File Claims section not found");
+            const wsRoot = resolveWorkspaceRoot(args as any);
 
-            const existing = res.rows.find(r => r["File"] === file_path && !r["Status"]?.includes("Done") && !r["Status"]?.includes("Abandoned"));
-            if (existing) {
-                throw new Error(`File ${file_path} is currently claimed by agent ${existing["Claimed By"]} with status ${existing["Status"]}`);
+            // Check all agent files for existing active claims
+            const allProgress = readAllAgentProgress(wsRoot);
+            for (const ap of allProgress) {
+                const activeClaim = ap.file_claims.find(c => c.file === file_path && !c.status.includes("Done") && !c.status.includes("Abandoned"));
+                if (activeClaim) {
+                    throw new Error(`File ${file_path} is currently claimed by agent ${ap.agent_id} with status ${activeClaim.status}`);
+                }
             }
 
-            res.rows.push({
-                "File": file_path,
-                "Claimed By": agent_id,
-                "Status": "🔄 Active"
-            });
+            // Write claim to agent's own progress file
+            let progress = readAgentProgress(wsRoot, agent_id);
+            if (!progress) {
+                const md = readManifest(wsRoot);
+                const res = getTableFromSection(md, "Agents");
+                const row = res?.rows.find(r => r["ID"] === agent_id);
+                progress = createAgentProgress(agent_id, row?.["Role"] || "unknown", row?.["Phase"] || "1");
+            }
+            progress.file_claims.push({ file: file_path, status: "🔄 Active" });
+            writeAgentProgress(wsRoot, progress);
 
-            const updatedClaim = replaceTableInSection(md, "File Claims", serializeTableToString(res.headers, res.rows));
-            if (!updatedClaim) throw new Error("Failed to replace File Claims table — section may be malformed");
-            md = updatedClaim;
-            writeManifest(workspaceRoot, md);
-            return { toolResult: `File ${file_path} claimed by ${agent_id}`, content: [{ type: "text", text: `File ${file_path} claimed by ${agent_id}` }] };
+            return { toolResult: `File ${file_path} claimed by ${agent_id}`, content: [{ type: "text", text: `File ${file_path} claimed by ${agent_id} (written to agent progress file)` }] };
         }
 
         if (name === "check_file_claim") {
             const file_path = (args as any)?.file_path;
             if (!file_path) throw new Error("Missing required argument: file_path");
-            const md = readManifest(workspaceRoot);
-            const res = getTableFromSection(md, "File Claims");
-            if (!res) throw new Error("File Claims section not found");
+            const wsRoot = resolveWorkspaceRoot(args as any);
 
-            const existing = res.rows.filter(r => r["File"] === file_path);
-            return { content: [{ type: "text", text: JSON.stringify(existing, null, 2) }] };
+            // Check both manifest AND agent progress files for claims
+            const claims: Array<{ agent_id: string; file: string; status: string; source: string }> = [];
+
+            // 1. Check agent progress files (most up-to-date)
+            const allProgress = readAllAgentProgress(wsRoot);
+            for (const ap of allProgress) {
+                for (const c of ap.file_claims) {
+                    if (c.file === file_path) {
+                        claims.push({ agent_id: ap.agent_id, file: c.file, status: c.status, source: "agent_file" });
+                    }
+                }
+            }
+
+            // 2. Fallback: check manifest (for pre-P2 data)
+            try {
+                const md = readManifest(wsRoot);
+                const res = getTableFromSection(md, "File Claims");
+                if (res) {
+                    const manifestClaims = res.rows.filter(r => r["File"] === file_path);
+                    for (const mc of manifestClaims) {
+                        // Only add if not already found in agent files
+                        if (!claims.some(c => c.agent_id === mc["Claimed By"])) {
+                            claims.push({ agent_id: mc["Claimed By"], file: mc["File"], status: mc["Status"], source: "manifest" });
+                        }
+                    }
+                }
+            } catch { /* manifest may not exist yet */ }
+
+            return { content: [{ type: "text", text: JSON.stringify(claims, null, 2) }] };
         }
 
         if (name === "release_file_claim") {
@@ -367,19 +444,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const file_path = (args as any)?.file_path;
             const status = (args as any)?.status;
             if (!agent_id || !file_path || !status) throw new Error("Missing required arguments: agent_id, file_path, status");
-            let md = readManifest(workspaceRoot);
-            const res = getTableFromSection(md, "File Claims");
-            if (!res) throw new Error("File Claims section not found");
+            const wsRoot = resolveWorkspaceRoot(args as any);
 
-            const row = res.rows.find(r => r["File"] === file_path && r["Claimed By"] === agent_id && !r["Status"]?.includes("Done"));
-            if (!row) throw new Error(`Active claim for ${file_path} by ${agent_id} not found`);
-            row["Status"] = status;
+            // Update claim in agent's own progress file
+            let progress = readAgentProgress(wsRoot, agent_id);
+            if (!progress) throw new Error(`Agent progress file for ${agent_id} not found`);
 
-            const updatedRelease = replaceTableInSection(md, "File Claims", serializeTableToString(res.headers, res.rows));
-            if (!updatedRelease) throw new Error("Failed to replace File Claims table — section may be malformed");
-            md = updatedRelease;
-            writeManifest(workspaceRoot, md);
-            return { toolResult: `File ${file_path} claim released with status ${status}`, content: [{ type: "text", text: `File ${file_path} claim released with status ${status}` }] };
+            const claim = progress.file_claims.find(c => c.file === file_path && !c.status.includes("Done"));
+            if (!claim) throw new Error(`Active claim for ${file_path} by ${agent_id} not found`);
+            claim.status = status;
+            writeAgentProgress(wsRoot, progress);
+
+            return { toolResult: `File ${file_path} claim released with status ${status}`, content: [{ type: "text", text: `File ${file_path} claim released with status ${status} (written to agent progress file)` }] };
         }
 
         if (name === "get_agent_prompt") {
@@ -410,26 +486,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const reporter = (args as any)?.reporter;
             if (!severity || !description || !reporter) throw new Error("Missing required arguments: severity, description, reporter");
             const area = (args as any)?.area || "";
-            let md = readManifest(workspaceRoot);
-            const res = getTableFromSection(md, "Issues");
-            if (!res) throw new Error("Issues section not found");
+            const wsRoot = resolveWorkspaceRoot(args as any);
 
-            res.rows.push({
-                "Severity": severity,
-                "File/Area": area,
-                "Description": description,
-                "Reported By": reporter
-            });
+            // Write issue to reporter's agent progress file
+            let progress = readAgentProgress(wsRoot, reporter);
+            if (!progress) {
+                const md = readManifest(wsRoot);
+                const res = getTableFromSection(md, "Agents");
+                const row = res?.rows.find(r => r["ID"] === reporter);
+                progress = createAgentProgress(reporter, row?.["Role"] || "unknown", row?.["Phase"] || "1");
+            }
+            progress.issues.push({ severity, area, description });
+            writeAgentProgress(wsRoot, progress);
 
-            const updatedIssues = replaceTableInSection(md, "Issues", serializeTableToString(res.headers, res.rows));
-            if (!updatedIssues) throw new Error("Failed to replace Issues table — section may be malformed");
-            md = updatedIssues;
-            writeManifest(workspaceRoot, md);
-            return { toolResult: `Issue reported: ${description}`, content: [{ type: "text", text: `Issue reported: ${description}` }] };
+            return { toolResult: `Issue reported: ${description}`, content: [{ type: "text", text: `Issue reported: ${description} (written to agent progress file)` }] };
         }
 
         if (name === "get_swarm_status") {
-            const md = readManifest(workspaceRoot);
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            const md = readManifest(wsRoot);
             const agents = getTableFromSection(md, "Agents")?.rows || [];
             const issues = getTableFromSection(md, "Issues")?.rows || [];
 
@@ -447,6 +522,71 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }
 
             return { content: [{ type: "text", text: JSON.stringify({ agents, gates, issues }, null, 2) }] };
+        }
+
+        if (name === "rollup_agent_progress") {
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            let md = readManifest(wsRoot);
+
+            // Read all per-agent progress files
+            const allProgress = readAllAgentProgress(wsRoot);
+            if (allProgress.length === 0) {
+                return { content: [{ type: "text", text: "No agent progress files found." }] };
+            }
+
+            // 1. Update Agents table with statuses from progress files
+            const agentsTable = getTableFromSection(md, "Agents");
+            if (agentsTable) {
+                for (const ap of allProgress) {
+                    const row = agentsTable.rows.find(r => r["ID"] === ap.agent_id);
+                    if (row) {
+                        row["Status"] = ap.status;
+                    }
+                }
+                const updatedAgents = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+                if (updatedAgents) md = updatedAgents;
+            }
+
+            // 2. Merge file claims from all agents into File Claims table
+            const claimsTable = getTableFromSection(md, "File Claims");
+            if (claimsTable) {
+                // Start fresh with claims from agent files
+                const mergedClaims: Array<{ File: string; "Claimed By": string; Status: string }> = [];
+                for (const ap of allProgress) {
+                    for (const c of ap.file_claims) {
+                        mergedClaims.push({ "File": c.file, "Claimed By": ap.agent_id, "Status": c.status });
+                    }
+                }
+                claimsTable.rows = mergedClaims.map(c => ({ "File": c.File, "Claimed By": c["Claimed By"], "Status": c.Status }));
+                const updatedClaims = replaceTableInSection(md, "File Claims", serializeTableToString(claimsTable.headers, claimsTable.rows));
+                if (updatedClaims) md = updatedClaims;
+            }
+
+            // 3. Merge issues from all agents into Issues table
+            const issuesTable = getTableFromSection(md, "Issues");
+            if (issuesTable) {
+                const mergedIssues: Array<Record<string, string>> = [];
+                for (const ap of allProgress) {
+                    for (const issue of ap.issues) {
+                        mergedIssues.push({
+                            "Severity": issue.severity,
+                            "File/Area": issue.area,
+                            "Description": issue.description,
+                            "Reported By": ap.agent_id
+                        });
+                    }
+                }
+                issuesTable.rows = mergedIssues;
+                const updatedIssues = replaceTableInSection(md, "Issues", serializeTableToString(issuesTable.headers, issuesTable.rows));
+                if (updatedIssues) md = updatedIssues;
+            }
+
+            // 4. Write the consolidated manifest and update swarm status
+            writeManifest(wsRoot, md);
+            writeSwarmStatus(wsRoot, md, `Rolled up progress from ${allProgress.length} agents`);
+
+            const summary = allProgress.map(ap => `${ap.agent_id} (${ap.role}): ${ap.status}`).join(", ");
+            return { toolResult: `Rollup complete: ${summary}`, content: [{ type: "text", text: `Rollup complete for ${allProgress.length} agents: ${summary}` }] };
         }
 
         throw new Error(`Unknown tool: ${name}`);
