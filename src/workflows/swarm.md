@@ -37,8 +37,9 @@ Extract the following from $ARGUMENTS:
 2. Determine the agent roster based on the `Task` and `Preset` (if any).
 3. If `--auto` is specified:
    - YOU MUST run the `auto_mode_toggle` script (located in `~/.gemini/antigravity/skills/agent-coordination/scripts/auto_mode_toggle.[ps1|sh]`) to backup and enable autonomous Antigravity settings.
-4. **Quota Pre-check**: Prompt the user to check their Antigravity Cockpit status bar and provide the current quota percentages for the selected models.
-5. Call MCP tool `create_swarm_manifest` with the `mission` and `supervision_level`, explicitly populating the `## Quota Check` table in the manifest with the provided percentages.
+4. **Quota Pre-check**: Run `~/.gemini/antigravity/skills/agent-coordination/scripts/quota_check.ps1` (or `.sh` on mac/linux) in the terminal. Read the output `quota_snapshot.json` to get the real-time Cockpit quota percentages.
+   - If any core model is < 30%, explicitly auto-route those assignments to fallback models (`model_fallback.json`).
+5. Call MCP tool `create_swarm_manifest` with the `mission` and `supervision_level`, explicitly populating the `## Quota Check` table in the manifest with the metrics you just read from the JSON.
 6. Present the swarm plan to the user:
 
 ```
