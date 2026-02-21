@@ -13,6 +13,7 @@ This skill provides the complete coordination layer for multi-agent operations i
 - **Swarm** — Multi-agent decomposition with phased execution
 - **Consult** — Lightweight cross-model collaboration when stuck
 - **Routing** — Task-aware model selection from the fallback chain
+- **MCP Server** — Programmatic manifest management via MCP tools
 
 ---
 
@@ -244,6 +245,26 @@ When an agent is stuck (3+ attempts failed), before a full handoff:
 3. The consultant reads ONLY `consult_request.md`, writes `consult_response.md`, and is done
 
 4. The original agent reads the response and continues with full context intact
+
+## Part 4: MCP Coordination Server
+
+The `agent-coordinator` MCP server provides tools to programmatically manage the Swarm Manifest, allowing the AI to orchestrate the swarm directly rather than generating manual instructions. 
+
+### Available MCP Tools
+
+*   **`create_swarm_manifest`**: Initializes a new `swarm-manifest.md` for a project. (Req: `mission`)
+*   **`read_manifest_section`**: Reads a specific table/section from the manifest (e.g. `Agents`, `File Claims`).
+*   **`update_agent_status`**: Changes the status of an agent in the Agents table (e.g. to `✅ Complete`).
+*   **`check_phase_gates`**: Validates if all agents assigned to a specific phase have completed their work.
+*   **`claim_file`** / **`check_file_claim`** / **`release_file_claim`**: Manages file-level locks in the File Claims section to prevent conflicts between parallel agents.
+*   **`get_agent_prompt`**: Retrieves and populates a role-specific prompt (e.g., Architect, Developer) with the mission and scope variables.
+*   **`report_issue`**: Appends an issue to the Issues table (e.g. `🔴 CONFLICT`, `🟡 BUG`).
+*   **`get_swarm_status`**: Summarizes the entire manifest state (agents, phase gates, issues) as a structured JSON object.
+
+### Available MCP Resources
+
+*   **`manifest://current`**: The live contents of the `swarm-manifest.md` in the current workspace.
+*   **`config://models`**: The global `model_fallback.json` configuration for routing rules.
 
 ---
 

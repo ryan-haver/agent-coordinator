@@ -156,6 +156,38 @@ else
 fi
 git config --global core.excludesfile "$GI_DST"
 
+# 7. MCP Server Installation
+MCP_SRC="$SRC/mcp-server"
+if [ -f "$MCP_SRC/package.json" ]; then
+    echo "  ⚙️  Layer 7: Building MCP Server..."
+    (cd "$MCP_SRC" && npm install --silent && npm run build --silent)
+    echo "  ✅ Layer 7: MCP Server built successfully"
+
+    MCP_CONFIG_FILE="$HOME_DIR/.gemini/antigravity/mcp_config.json"
+    NODE_SCRIPT_PATH="$MCP_SRC/build/index.js"
+
+    # Use node to reliably update the JSON config
+    node -e "
+        const fs = require('fs');
+        const path = '$MCP_CONFIG_FILE';
+        const scriptPath = '$NODE_SCRIPT_PATH'.replace(/\\\\/g, '/');
+        let config = { mcpServers: {} };
+        if (fs.existsSync(path)) {
+            try {
+                const content = fs.readFileSync(path, 'utf8');
+                if (content.trim()) config = JSON.parse(content);
+            } catch (e) {}
+        }
+        if (!config.mcpServers) config.mcpServers = {};
+        config.mcpServers['agent-coordinator'] = {
+            command: 'node',
+            args: [scriptPath]
+        };
+        fs.writeFileSync(path, JSON.stringify(config, null, 2));
+    "
+    echo "  ✅ Layer 7: Registered MCP server in mcp_config.json"
+fi
+
 echo ""
 echo "🏷️  Agent Coordinator installed successfully!"
 echo ""

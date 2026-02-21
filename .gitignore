@@ -1,3 +1,7 @@
 # Agent workspace (local-only)
 .agent/
 .vscode/
+
+# MCP Server
+src/mcp-server/node_modules/
+src/mcp-server/build/

@@ -162,6 +162,42 @@ else {
 }
 git config --global core.excludesfile $giDst
 
+# 7. MCP Server Installation
+$mcpSrc = Join-Path $src "mcp-server"
+if (Test-Path (Join-Path $mcpSrc "package.json")) {
+    Write-Host "  Layer 7: Building MCP Server..." -ForegroundColor Yellow
+    Push-Location $mcpSrc
+    npm install --silent
+    npm run build --silent
+    Pop-Location
+    Write-Host "  Layer 7: MCP Server built successfully" -ForegroundColor Green
+
+    $mcpConfigFile = Join-Path $home_ ".gemini\antigravity\mcp_config.json"
+    $mcpConfig = @{ mcpServers = @{} }
+    if (Test-Path $mcpConfigFile) {
+        if ((Get-Item $mcpConfigFile).Length -gt 0) {
+            try { $mcpConfig = Get-Content $mcpConfigFile -Raw | ConvertFrom-Json } catch { }
+        }
+    }
+    
+    if (-not $mcpConfig.mcpServers) {
+        $mcpConfig | Add-Member -Name "mcpServers" -Value @{} -MemberType NoteProperty -Force
+    }
+
+    # Convert paths to forward slashes for cross-platform node compatibility in JSON
+    $nodeScriptPath = (Join-Path $mcpSrc 'build\index.js').Replace('\', '/')
+    
+    # Use ordered dictionary to prevent property reordering if desired, but custom PSCustomObject works
+    $agentServer = @{
+        command = "node"
+        args    = @($nodeScriptPath)
+    }
+    
+    $mcpConfig.mcpServers | Add-Member -Name "agent-coordinator" -Value $agentServer -MemberType NoteProperty -Force
+    $mcpConfig | ConvertTo-Json -Depth 5 | Set-Content $mcpConfigFile
+    Write-Host "  Layer 7: Registered MCP server in mcp_config.json" -ForegroundColor Green
+}
+
 Write-Host ""
 Write-Host "Agent Coordinator installed successfully!" -ForegroundColor Cyan
 Write-Host ""
