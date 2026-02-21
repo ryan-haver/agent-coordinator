@@ -45,8 +45,9 @@ Sourced from [Antigravity Cockpit](https://github.com/jlcodes99/vscode-antigravi
 | Phase | Name | Status | Effort |
 |-------|------|--------|--------|
 | **1A** | Core Merge | ✅ Complete | Foundation — minimum viable system |
-| **1B** | Enhanced Operations | After 1A | Supervision, autonomy, presets |
-| **2A** | NotebookLM Integration | After 1B | Research & persistent knowledge |
+| **1B** | MCP Coordination Server | **Next** | Programmatic manifest management via MCP tools |
+| **1C** | Enhanced Operations | After 1B | Supervision, autonomy, presets |
+| **2A** | NotebookLM Integration | After 1C | Research & persistent knowledge |
 | **2B** | Fusebase Integration | After 2A | Artifact storage, project docs, task tracking |
 | **3** | Cockpit Quota Awareness | After 2B | Passive quota monitoring |
 | **4** | Direct Quota API | Future | Programmatic quota checking |
@@ -105,7 +106,88 @@ The template includes sections for Acceptance Criteria, Constraints, Non-Functio
 
 ---
 
-## Phase 1B: Enhanced Operations
+## Phase 1B: MCP Coordination Server (Next)
+
+Expose manifest-based coordination as programmatic MCP tools so the AI can manage the swarm lifecycle directly instead of generating instructions for the user to follow manually.
+
+### Why MCP Before Enhanced Operations
+
+| Without MCP Server | With MCP Server |
+|---|---|
+| AI generates text instructions for user | AI calls tools to manage manifest directly |
+| User manually copies prompts to Agent Manager | AI populates prompts and presents for dispatch |
+| User manually checks manifest for phase gates | AI calls `check_phase_gates` tool |
+| File claims tracked by convention only | AI calls `claim_file` / `check_file_claim` tools |
+| No structured status — user reads raw manifest | AI calls `get_swarm_status` for parsed summary |
+
+Every subsequent phase (supervision levels, autonomous mode, presets) becomes **dramatically simpler** to implement when coordination is tool-based rather than text-based.
+
+### Architecture
+
+```
+Antigravity Agent
+  ↕ MCP Protocol (stdio)
+Coordination MCP Server (TypeScript)
+  ↕ File I/O
+swarm-manifest.md + model_fallback.json
+```
+
+The server is a **stateless file adapter** — it reads and writes the manifest and config files. All coordination state lives in the manifest (single source of truth).
+
+### Tool Catalog
+
+#### Manifest Management (4 tools)
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `create_swarm_manifest` | Initialize a new manifest from template | `mission`, `supervision_level` |
+| `read_manifest_section` | Read a specific section of the manifest | `section` (agents, file_claims, phase_gates, issues, handoff_notes, branches) |
+| `update_agent_status` | Update an agent's status in the Agents table | `agent_id`, `status` (active, complete, blocked, pending) |
+| `check_phase_gates` | Check if all agents in a phase are complete | `phase_number` |
+
+#### File Coordination (3 tools)
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `claim_file` | Register a file claim before editing | `agent_id`, `file_path` |
+| `check_file_claim` | Check if a file is already claimed | `file_path` |
+| `release_file_claim` | Release a claim after editing | `agent_id`, `file_path`, `status` (done, abandoned) |
+
+#### Agent Dispatch (3 tools)
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `get_agent_prompt` | Generate a populated prompt for a role | `role`, `mission`, `scope`, `agent_id` |
+| `report_issue` | Add an issue to the manifest | `severity`, `area`, `description`, `reporter` |
+| `get_swarm_status` | Return a structured status summary | (none) |
+
+#### Resources (2 resources)
+
+| URI | Description |
+|-----|-------------|
+| `manifest://current` | Current `swarm-manifest.md` contents |
+| `config://models` | `model_fallback.json` with routing info |
+
+### Implementation
+
+- **Runtime**: TypeScript with `@modelcontextprotocol/sdk`
+- **Transport**: stdio (standard for Antigravity MCP servers)
+- **State**: Stateless — reads/writes `swarm-manifest.md` directly
+- **Location**: `src/mcp-server/` in this repository
+- **Install**: `install.ps1`/`install.sh` register the server in Antigravity's MCP config
+
+### Deliverables
+
+- MCP server with 10 tools + 2 resources
+- Manifest parser (read/write markdown tables)
+- Prompt populator (reads agent prompt templates, fills variables)
+- Install script integration (registers MCP server config)
+- Updated SKILL.md with MCP tool usage documentation
+- Updated workflows to use MCP tools when available
+
+---
+
+## Phase 1C: Enhanced Operations
 
 Layer on sophistication for power users. **Goal: full control over supervision level, autonomous operation, and error recovery.**
 

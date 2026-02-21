@@ -12,13 +12,14 @@ Coding with AI hits the same walls:
 
 ## The Solution
 
-Agent Coordinator is a **3-part coordination system** installed into your Antigravity environment:
+Agent Coordinator is a **4-part coordination system** installed into your Antigravity environment:
 
 | Part | What It Does | When To Use |
 |------|-------------|-------------|
 | **Handoff** | Context-aware model switching via structured manifests | Context filling up, reasoning loops |
 | **Swarm** | Multi-agent decomposition with phased execution | Complex multi-file tasks |
 | **Consultation** | Lightweight cross-model Q&A without losing context | Stuck on a specific problem |
+| **MCP Server** | Programmatic manifest management via MCP tools | Automated coordination (Phase 1B) |
 
 ### Escalation Ladder
 
