@@ -179,8 +179,20 @@ export function readManifest(workspaceRoot: string): string {
 
 /**
  * Writes the swarm-manifest.md to the workspace root.
+ * Creates a backup before writing to prevent data loss.
  */
 export function writeManifest(workspaceRoot: string, content: string): void {
     const manifestPath = path.join(workspaceRoot, 'swarm-manifest.md');
+    const backupPath = manifestPath + '.bak';
+
+    // Backup existing manifest before overwriting
+    if (fs.existsSync(manifestPath)) {
+        try {
+            fs.copyFileSync(manifestPath, backupPath);
+        } catch {
+            // Non-fatal: backup failure shouldn't prevent the write
+        }
+    }
+
     fs.writeFileSync(manifestPath, content, 'utf8');
 }

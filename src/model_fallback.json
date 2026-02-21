@@ -124,5 +124,15 @@
       "context_compression_interval_tokens": 50000,
       "context_warning_threshold_percent": 85
     }
+  },
+  "auto_mode_settings": {
+    "description": "Settings keys injected by auto_mode_toggle scripts. Update these if the actual Antigravity settings schema differs.",
+    "verified": false,
+    "keys": {
+      "auto_run_commands": "cascade.autoRunCommands",
+      "allow_in_background": "cascade.allowInBackground",
+      "auto_approve_edits": "cascade.autoApproveEdits"
+    },
+    "notes": "These key names are best-guess from the Cockpit extension type system. Set verified=true once empirically confirmed."
   }
 }

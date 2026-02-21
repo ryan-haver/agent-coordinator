@@ -11,3 +11,5 @@ build/
 swarm_status.json
 quota_snapshot.json
 swarm-agent-*.json
+swarm-manifest.md.bak
+swarm-docs/
