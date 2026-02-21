@@ -214,6 +214,8 @@ Write-Host "    /pivot      - Generate handoff manifest and switch models" -Fore
 Write-Host "    /resume     - Pick up from active manifest" -ForegroundColor Gray
 Write-Host "    /swarm      - Decompose task into multi-agent swarm" -ForegroundColor Gray
 Write-Host "    /swarm-auto - Rapid swarm with all prompts upfront" -ForegroundColor Gray
+Write-Host "    /consult    - Cross-model consultation" -ForegroundColor Gray
+Write-Host "    /status     - Swarm progress dashboard" -ForegroundColor Gray
 Write-Host "    /health     - Audit system status" -ForegroundColor Gray
 Write-Host ""
 Write-Host "  Run /health in your next Antigravity session to verify." -ForegroundColor White

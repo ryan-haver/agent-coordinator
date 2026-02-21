@@ -156,9 +156,13 @@ export function replaceTableInSection(markdown: string, sectionHeading: string, 
     const newSectionContent = beforeTable + (beforeTable.endsWith('\n') ? '' : '\n') + newTableText + '\n' + afterTable;
 
     const beforeSection = markdown.substring(0, sectionMatch.index);
-    const afterSection = isEOF ? '' : markdown.substring(sectionMatch.index + sectionContent.length);
+    // The full match may include the next heading prefix (e.g., '\n## ').
+    // afterSection must start AFTER the full match to avoid duplicating the next heading.
+    const afterSection = isEOF ? '' : markdown.substring(sectionMatch.index + sectionMatch[0].length);
+    // If not EOF, we need to re-insert the next heading prefix that was part of the lookahead
+    const nextHeadingPrefix = isEOF ? '' : sectionMatch[0].substring(sectionContent.length);
 
-    return beforeSection + newSectionContent + afterSection;
+    return beforeSection + newSectionContent + nextHeadingPrefix + afterSection;
 }
 
 /**

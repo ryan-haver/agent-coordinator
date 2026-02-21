@@ -16,6 +16,9 @@
 
 set -euo pipefail
 
+# Detect GNU sed for macOS portability
+if command -v gsed &>/dev/null; then SED=gsed; else SED=sed; fi
+
 FORCE=false
 for arg in "$@"; do
     case "$arg" in
@@ -50,8 +53,8 @@ if [ -f "$GEMINI_DST" ]; then
     if grep -q "Agent Coordination\|Smart Handoff" "$GEMINI_DST" 2>/dev/null; then
         if [ "$FORCE" = true ]; then
             # Remove old coordination section (handles both mid-file and end-of-file positions)
-            sed -i.bak '/^# \(Agent Coordination System\|Agent Coordinator\|Global Smart Handoff\)/,${/^# \(Agent Coordination System\|Agent Coordinator\|Global Smart Handoff\)/!{/^# [^#]/!d;}}' "$GEMINI_DST"
-            sed -i.bak -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$GEMINI_DST"
+            $SED -i.bak '/^# \(Agent Coordination System\|Agent Coordinator\|Global Smart Handoff\)/,${/^# \(Agent Coordination System\|Agent Coordinator\|Global Smart Handoff\)/!{/^# [^#]/!d;}}' "$GEMINI_DST"
+            $SED -i.bak -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$GEMINI_DST"
             rm -f "${GEMINI_DST}.bak"
             echo "" >> "$GEMINI_DST"
             cat "$GEMINI_SRC" >> "$GEMINI_DST"
@@ -144,8 +147,8 @@ if [ -f "$GI_DST" ]; then
     if grep -q "Agent Coordination\|Smart Handoff" "$GI_DST" 2>/dev/null; then
         if [ "$FORCE" = true ]; then
             # Remove old coordination section (handles both mid-file and end-of-file positions)
-            sed -i.bak '/^# \(Agent Coordinator\|Agent Coordination\|Smart Handoff\)/,${/^# \(Agent Coordinator\|Agent Coordination\|Smart Handoff\)/!{/^# [^#]/!d;}}' "$GI_DST"
-            sed -i.bak -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$GI_DST"
+            $SED -i.bak '/^# \(Agent Coordinator\|Agent Coordination\|Smart Handoff\)/,${/^# \(Agent Coordinator\|Agent Coordination\|Smart Handoff\)/!{/^# [^#]/!d;}}' "$GI_DST"
+            $SED -i.bak -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$GI_DST"
             rm -f "${GI_DST}.bak"
             echo "" >> "$GI_DST"
             cat "$SRC/gitignore-global" >> "$GI_DST"
@@ -177,12 +180,12 @@ if [ -f "$MCP_SRC/package.json" ]; then
     # Use node to reliably update the JSON config
     node -e "
         const fs = require('fs');
-        const path = '$MCP_CONFIG_FILE';
-        const scriptPath = '$NODE_SCRIPT_PATH'.replace(/\\\\/g, '/');
+        const configPath = process.argv[1];
+        const scriptPath = process.argv[2].replace(/\\\\/g, '/');
         let config = { mcpServers: {} };
-        if (fs.existsSync(path)) {
+        if (fs.existsSync(configPath)) {
             try {
-                const content = fs.readFileSync(path, 'utf8');
+                const content = fs.readFileSync(configPath, 'utf8');
                 if (content.trim()) config = JSON.parse(content);
             } catch (e) {}
         }
@@ -191,8 +194,8 @@ if [ -f "$MCP_SRC/package.json" ]; then
             command: 'node',
             args: [scriptPath]
         };
-        fs.writeFileSync(path, JSON.stringify(config, null, 2));
-    "
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    " -- "$MCP_CONFIG_FILE" "$NODE_SCRIPT_PATH"
     echo "  ✅ Layer 7: Registered MCP server in mcp_config.json"
 fi
 
@@ -204,6 +207,8 @@ echo "    /pivot      — Generate handoff manifest and switch models"
 echo "    /resume     — Pick up from active manifest"
 echo "    /swarm      — Decompose task into multi-agent swarm"
 echo "    /swarm-auto — Rapid swarm with all prompts upfront"
+echo "    /consult    — Cross-model consultation"
+echo "    /status     — Swarm progress dashboard"
 echo "    /health     — Audit system status"
 echo ""
 echo "  Run /health in your next Antigravity session to verify."

@@ -46,8 +46,8 @@ function getModelsConfigPath(): string {
 
 function writeSwarmStatus(rootDir: string, md: string, lastEvent: string) {
     try {
-        const modeSection = md.match(/Supervision:\s*(\w+)/);
-        const supervision = modeSection ? modeSection[1] : "unknown";
+        const modeSection = md.match(/Supervision:\s*(.+)/);
+        const supervision = modeSection ? modeSection[1].trim() : "unknown";
 
         // Extract mission for the task field
         const missionMatch = md.match(/## Mission\s*\n+(.+)/);
@@ -63,6 +63,11 @@ function writeSwarmStatus(rootDir: string, md: string, lastEvent: string) {
         const activeAgent = agents.find(a => a["Status"]?.includes("Active"));
         const phase = activeAgent?.["Phase"] || (complete === agents.length ? "done" : "0");
 
+        // Determine if user action is needed (supervision=gates + all phase agents done)
+        const phaseAgents = agents.filter(a => a["Phase"]?.trim() === phase);
+        const allPhaseAgentsDone = phaseAgents.length > 0 && phaseAgents.every(a => a["Status"]?.includes("Complete"));
+        const needsAction = (supervision.toLowerCase().includes("gate") || supervision === "2") && allPhaseAgentsDone && phase !== "done";
+
         const statusObj = {
             task,
             phase,
@@ -71,7 +76,7 @@ function writeSwarmStatus(rootDir: string, md: string, lastEvent: string) {
             agents_complete: complete,
             agents_pending: pending,
             last_event: lastEvent,
-            needs_user_action: false,
+            needs_user_action: needsAction,
             timestamp: new Date().toISOString()
         };
         fs.writeFileSync(path.join(rootDir, "swarm_status.json"), JSON.stringify(statusObj, null, 2));
@@ -274,7 +279,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         if (name === "read_manifest_section") {
             const md = readManifest(workspaceRoot);
-            const section = (args as any).section;
+            const section = (args as any)?.section;
+            if (!section || typeof section !== "string") throw new Error("Missing required argument: section");
             const res = getTableFromSection(md, section);
             if (!res) throw new Error(`Section ${section} not found or no table in it`);
             return { toolResult: JSON.stringify(res, null, 2), content: [{ type: "text", text: JSON.stringify(res, null, 2) }] };
@@ -312,7 +318,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const phaseAgents = res.rows.filter(r => r["Phase"]?.trim() === String(phaseNum).trim());
             if (phaseAgents.length === 0) return { content: [{ type: "text", text: "No agents in this phase." }] };
 
-            const allDone = phaseAgents.every(r => r["Status"] === "✅ Complete");
+            const allDone = phaseAgents.every(r => r["Status"]?.trim() === "✅ Complete" || r["Status"]?.includes("Complete"));
             const summary = phaseAgents.map(r => `${r["ID"]}: ${r["Status"]}`).join("\n");
 
             const resultText = `All agents complete: ${allDone}\nDetails:\n${summary}`;
