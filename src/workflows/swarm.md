@@ -31,8 +31,9 @@ Break the task into agent assignments. Determine:
    - Are there any shared files that need careful coordination?
 
 3. **What models should each agent use?**
-   - Default: Architect = Claude 4.6, Developer = Gemini 3 Pro, QA = Gemini 3 Flash
-   - Adjust based on task complexity
+    - Read `~/.antigravity-configs/model_fallback.json` for current model names
+    - Default: Architect = Claude (Tier 1), Developer = Gemini Pro (Tier 2), QA = Gemini Flash (Tier 3)
+    - Adjust based on task complexity
 
 Present this breakdown to the user:
 
@@ -40,10 +41,10 @@ Present this breakdown to the user:
 📋 Swarm Plan for: [task summary]
 
 Agents:
-  α Architect    → Claude 4.6       → plan.md, docs
-  β Developer    → Gemini 3 Pro     → /src/backend/**
-  γ Developer    → Gemini 3 Pro     → /src/frontend/**
-  δ QA           → Gemini 3 Flash   → read-only, tests
+  α Architect    → Claude (Tier 1)   → plan.md, docs
+  β Developer    → Gemini Pro (T2)   → /src/backend/**
+  γ Developer    → Gemini Pro (T2)   → /src/frontend/**
+  δ QA           → Gemini Flash (T3) → read-only, tests
 
 Phases:
   1. Planning:       α
@@ -76,7 +77,7 @@ Generate a ready-to-paste prompt for the Architect agent:
 
 ```
 📌 PHASE 1: PLANNING
-Model: Claude 4.6
+Model: Claude (Tier 1) — see model_fallback.json for exact name
 Paste this prompt into Agent Manager (Ctrl+E → New Task):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -101,10 +102,10 @@ Generate prompts for all Developer agents (users dispatch in parallel):
 📌 PHASE 2: IMPLEMENTATION
 Dispatch these agents in parallel via Agent Manager:
 
-━━━ Agent β (Backend Developer) — Gemini 3 Pro ━━━
+━━━ Agent β (Backend Developer) — Gemini Pro ━━━
 [Populated developer.md prompt with scope = /src/backend/**]
 
-━━━ Agent γ (Frontend Developer) — Gemini 3 Pro ━━━
+━━━ Agent γ (Frontend Developer) — Gemini Pro ━━━
 [Populated developer.md prompt with scope = /src/frontend/**]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -123,7 +124,7 @@ Generate the QA agent prompt:
 
 ```
 📌 PHASE 3: VERIFICATION
-Model: Gemini 3 Flash
+Model: Gemini Flash (Tier 3) — see model_fallback.json for exact name
 Paste this prompt into Agent Manager:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -152,10 +153,10 @@ Read the final state of `swarm-manifest.md` and generate a report:
 ### Agents
 | ID | Role | Model | Status |
 |----|------|-------|--------|
-| α  | Architect | Claude 4.6 | ✅ |
-| β  | Developer (Backend) | Gemini 3 Pro | ✅ |
-| γ  | Developer (Frontend) | Gemini 3 Pro | ✅ |
-| δ  | QA | Gemini 3 Flash | ✅ |
+| α  | Architect | Claude (Tier 1) | ✅ |
+| β  | Developer (Backend) | Gemini Pro (Tier 2) | ✅ |
+| γ  | Developer (Frontend) | Gemini Pro (Tier 2) | ✅ |
+| δ  | QA | Gemini Flash (Tier 3) | ✅ |
 
 ### Issues Found
 [List from ## Issues, or "None"]

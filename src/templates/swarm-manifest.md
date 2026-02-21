@@ -4,6 +4,11 @@
 ## Mission
 $MISSION
 
+## Mode
+<!-- Supervision level: supervised (default) | rapid | autonomous -->
+Supervision: supervised
+Auto-merge: false
+
 ## Agents
 
 | ID | Role | Model | Scope | Status | Phase |
@@ -23,6 +28,12 @@ $MISSION
 
 ## Handoff Notes
 <!-- Agents leave context here for successors or for recovery after context limits -->
+
+## Branches
+<!-- Track git branches per agent for isolated work -->
+
+| Agent | Branch | Status |
+|-------|--------|--------|
 
 ## Issues
 <!-- Any agent can flag problems here with severity -->

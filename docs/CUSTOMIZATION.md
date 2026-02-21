@@ -127,17 +127,17 @@ The `task_routing` section in `model_fallback.json` maps work categories to mode
 ```json
 "task_routing": {
   "routes": {
-    "deep_debugging": "claude-4-opus",
-    "architecture_design": "claude-4-opus",
-    "large_refactoring": "gemini-3-pro-image",
-    "multi_file_scanning": "gemini-3-pro-image",
-    "docs_formatting": "gemini-3-flash-image",
-    "quick_fixes": "gemini-3-flash-image"
+    "deep_debugging": "Claude Opus 4.6 (Thinking)",
+    "architecture_design": "Claude Opus 4.6 (Thinking)",
+    "large_refactoring": "Gemini 3.1 Pro (High)",
+    "multi_file_scanning": "Gemini 3.1 Pro (High)",
+    "docs_formatting": "Gemini 3 Flash",
+    "quick_fixes": "Gemini 3 Flash"
   }
 }
 ```
 
-Add new categories or reassign models as needed. The agent reads this file during `/pivot` to determine the best handoff target.
+> **Note:** Route values must match the exact `model` field in `model_fallback.json`. Update them when models change.
 
 ---
 

@@ -162,15 +162,18 @@ Nine pre-defined roles with model recommendations. Prompts are in `~/.antigravit
 
 | Role | Default Model | File Access | Core Job |
 |------|--------------|-------------|----------|
-| **Project Manager** | Claude Sonnet (Thinking) | `*.md`, manifest, spec | Scope, plan, assign, enforce spec |
-| **Architect** | Claude Opus (Thinking) | `*.md`, plan files only | Analyze codebase → write `plan.md`. No code edits. |
-| **Developer** | Gemini 3 Pro (High) | Scoped directories only | Implement plan. Update manifest on completion. |
-| **Debugger** | Claude Sonnet (Thinking) | Scoped directories only | Root cause analysis, minimal targeted fixes. |
-| **QA** | Gemini 3 Flash | Read-only + test commands | Run tests, review diffs, report issues in manifest. |
-| **Code Reviewer** | Claude Sonnet 4.5 | Read-only | Review diffs for quality, security, and plan alignment. |
-| **DevOps** | Gemini 3 Flash | Build/CI files only | Build verification, linting, CI/CD checks. |
-| **Explorer** | Gemini 3 Pro (High) | Read-only | Map codebase, discover patterns, report in manifest. |
-| **Researcher** | Gemini 3 Pro (High) | Read-only + NLM tools | Web/drive research, source curation, knowledge queries. |
+| **Project Manager** | Claude (Tier 1) | `*.md`, manifest, spec | Scope, plan, assign, enforce spec |
+| **Architect** | Claude (Tier 1) | `*.md`, plan files only | Analyze codebase → write `plan.md`. No code edits. |
+| **Developer** | Gemini Pro (Tier 2) | Scoped directories only | Implement plan. Update manifest on completion. |
+| **Debugger** | Claude (Tier 1) | Scoped directories only | Root cause analysis, minimal targeted fixes. |
+| **QA** | Gemini Flash (Tier 3) | Read-only + test commands | Run tests, review diffs, report issues in manifest. |
+| **Code Reviewer** | Claude (Tier 1) | Read-only | Review diffs for quality, security, and plan alignment. |
+| **DevOps** | Gemini Flash (Tier 3) | Build/CI files only | Build verification, linting, CI/CD checks. |
+| **Explorer** | Gemini Pro (Tier 2) | Read-only | Map codebase, discover patterns, report in manifest. |
+| **Researcher** | Gemini Pro (Tier 2) | Read-only + NLM tools | Web/drive research, source curation, knowledge queries. |
+
+> [!NOTE]
+> Model names above are generic families. Check `~/.antigravity-configs/model_fallback.json` for exact model selector names.
 
 ### Coordination Rules
 

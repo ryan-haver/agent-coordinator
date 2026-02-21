@@ -8,6 +8,7 @@
     Run from the agent-coordinator directory: .\uninstall.ps1
 #>
 
+param()
 $ErrorActionPreference = "Stop"
 $home_ = $env:USERPROFILE
 

@@ -110,10 +110,6 @@ for rule in handoff.md context_compression.md; do
     echo "  ✅ Rule: $rule"
 done
 
-# Workflows backup copy
-for wf in pivot.md resume.md health.md swarm.md swarm-auto.md; do
-    [ -f "$SRC/workflows/$wf" ] && cp "$SRC/workflows/$wf" "$CFG_DST/workflows/$wf"
-done
 
 # 5. Rules symlink
 LINK_PATH="$HOME_DIR/.gemini/antigravity/rules"

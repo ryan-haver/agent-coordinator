@@ -13,9 +13,9 @@ swarm_status.json
 consult_request.md
 consult_response.md
 
-# Swarm working documents
-spec.md
-plan.md
+# Swarm working documents (project root only)
+/spec.md
+/plan.md
 
 # Antigravity configs
 .antigravity-configs/

@@ -35,7 +35,7 @@ Same analysis as `/swarm`:
 ```
 ⚡ Rapid Swarm for: [task summary]
 
-Agents: α Architect (Claude 4.6) → β,γ Devs (Gemini 3 Pro) → δ QA (Flash)
+Agents: α Architect (Claude) → β,γ Devs (Gemini Pro) → δ QA (Flash)
 Scope:  β=/src/backend/**  γ=/src/frontend/**
 
 Generate all prompts? (Y / adjust)
@@ -64,7 +64,7 @@ After confirmation, generate the manifest AND all prompts in one output:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📌 PHASE 1: Dispatch NOW
-Agent: α Architect | Model: Claude 4.6
+Agent: α Architect | Model: Claude (Tier 1)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [Populated architect.md prompt]
@@ -72,14 +72,14 @@ Agent: α Architect | Model: Claude 4.6
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📌 PHASE 2: Dispatch AFTER Architect completes
-Agent: β Backend Dev | Model: Gemini 3 Pro
+Agent: β Backend Dev | Model: Gemini Pro (Tier 2)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [Populated developer.md prompt with backend scope]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Agent: γ Frontend Dev | Model: Gemini 3 Pro
+Agent: γ Frontend Dev | Model: Gemini Pro (Tier 2)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [Populated developer.md prompt with frontend scope]
@@ -87,7 +87,7 @@ Agent: γ Frontend Dev | Model: Gemini 3 Pro
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📌 PHASE 3: Dispatch AFTER ALL Devs complete
-Agent: δ QA | Model: Gemini 3 Flash
+Agent: δ QA | Model: Gemini Flash (Tier 3)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [Populated qa.md prompt]
@@ -99,9 +99,9 @@ Agent: δ QA | Model: Gemini 3 Flash
 
 ```
 🚀 DISPATCH ORDER:
-1. Ctrl+E → New Task → paste α prompt → set Claude 4.6 → go
-2. When α completes → New Task × 2 → paste β and γ → set Gemini 3 Pro → go
-3. When β+γ complete → New Task → paste δ → set Gemini 3 Flash → go
+1. Ctrl+E → New Task → paste α prompt → set Claude (Tier 1) → go
+2. When α completes → New Task × 2 → paste β and γ → set Gemini Pro (Tier 2) → go
+3. When β+γ complete → New Task → paste δ → set Gemini Flash (Tier 3) → go
 4. When δ completes → come back here for report
 ```
 

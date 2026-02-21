@@ -220,6 +220,7 @@ agent-coordinator/
     └── templates/
         ├── handoff_manifest.md            ← Handoff manifest template
         ├── swarm-manifest.md              ← Swarm manifest template
+        ├── spec.md                        ← Spec template (for PM agent)
         └── agent-prompts/                 ← 9 agent prompt templates
             ├── project-manager.md
             ├── architect.md

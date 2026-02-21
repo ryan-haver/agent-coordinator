@@ -48,10 +48,10 @@ Roster of all agents in the swarm with their assignments and current status.
 ```markdown
 | ID | Role | Model | Scope | Status | Phase |
 |----|------|-------|-------|--------|-------|
-| α  | Architect | Claude 4.6 | plan.md, docs/ | ✅ Complete | 1 |
-| β  | Developer | Gemini 3 Pro | src/backend/** | 🔄 Active | 2 |
-| γ  | Developer | Gemini 3 Pro | src/frontend/** | ⏳ Pending | 2 |
-| δ  | QA | Gemini 3 Flash | read-only | ⏳ Pending | 3 |
+| α  | Architect | Claude (Tier 1) | plan.md, docs/ | ✅ Complete | 1 |
+| β  | Developer | Gemini Pro (Tier 2) | src/backend/** | 🔄 Active | 2 |
+| γ  | Developer | Gemini Pro (Tier 2) | src/frontend/** | ⏳ Pending | 2 |
+| δ  | QA | Gemini Flash (Tier 3) | read-only | ⏳ Pending | 3 |
 ```
 
 ---

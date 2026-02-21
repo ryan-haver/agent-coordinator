@@ -114,13 +114,6 @@ foreach ($rule in @("handoff.md", "context_compression.md")) {
     Write-Host "  Rule: $rule" -ForegroundColor Green
 }
 
-# Workflows backup copy
-foreach ($wf in @("pivot.md", "resume.md", "health.md", "swarm.md", "swarm-auto.md")) {
-    $wfSrc = Join-Path $src "workflows\$wf"
-    if (Test-Path $wfSrc) {
-        Copy-Item $wfSrc "$cfgDst\workflows\$wf" -Force
-    }
-}
 
 # 5. Rules junction
 $junctionPath = Join-Path $home_ ".gemini\antigravity\rules"
