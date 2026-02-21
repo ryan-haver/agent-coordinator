@@ -1,17 +1,17 @@
 <#
 .SYNOPSIS
-    Uninstall Model Tag Team from your Antigravity environment.
+    Uninstall Agent Coordinator from your Antigravity environment.
 .DESCRIPTION
     Removes all Agent Coordination files from deployment locations.
     Does NOT delete the source project — only the deployed copies.
 .NOTES
-    Run from the model-tag-team directory: .\uninstall.ps1
+    Run from the agent-coordinator directory: .\uninstall.ps1
 #>
 
 $ErrorActionPreference = "Stop"
 $home_ = $env:USERPROFILE
 
-Write-Host "🏷️  Model Tag Team — Uninstalling..." -ForegroundColor Cyan
+Write-Host "🏷️  Agent Coordinator — Uninstalling..." -ForegroundColor Cyan
 Write-Host ""
 
 # 1. GEMINI.md — remove the coordination block, preserve other content
@@ -67,5 +67,5 @@ if (Test-Path $cfgDir) {
 }
 
 Write-Host ""
-Write-Host "🏷️  Model Tag Team uninstalled." -ForegroundColor Cyan
+Write-Host "🏷️  Agent Coordinator uninstalled." -ForegroundColor Cyan
 Write-Host "  Note: Global gitignore at ~/.config/git/ignore was left intact." -ForegroundColor Gray

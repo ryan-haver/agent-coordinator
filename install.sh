@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Install or reinstall Model Tag Team into your Antigravity environment.
+# Install or reinstall Agent Coordinator into your Antigravity environment.
 #
 # Copies all Agent Coordination files to their correct deployment locations:
 #   - GEMINI.md → ~/.gemini/GEMINI.md
@@ -11,15 +11,19 @@
 #   - Configs → ~/.antigravity-configs/
 #   - Global gitignore → ~/.config/git/ignore
 #
-# Safe to re-run. Run from the model-tag-team directory: ./install.sh
+# Safe to re-run. Run from the agent-coordinator directory: ./install.sh
+# Use --force to update GEMINI.md and gitignore even if already present.
 
 set -euo pipefail
+
+FORCE=false
+[ "${1:-}" = "--force" ] && FORCE=true
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 SRC="$ROOT/src"
 HOME_DIR="$HOME"
 
-echo "🏷️  Model Tag Team — Installing..."
+echo "🏷️  Agent Coordinator — Installing..."
 echo ""
 
 # 0. Clean up old skill directory (smart-handoff → agent-coordination)
@@ -35,7 +39,16 @@ GEMINI_DST="$HOME_DIR/.gemini/GEMINI.md"
 mkdir -p "$(dirname "$GEMINI_DST")"
 if [ -f "$GEMINI_DST" ]; then
     if grep -q "Agent Coordination\|Smart Handoff" "$GEMINI_DST" 2>/dev/null; then
-        echo "  ℹ️  Layer 1: GEMINI.md already contains coordination instructions — skipped"
+        if [ "$FORCE" = true ]; then
+            sed -i.bak '/^# \(Agent Coordination System\|Global Smart Handoff\)/,/^# [^#]/{/^# [^#]/!d;}' "$GEMINI_DST"
+            sed -i.bak -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$GEMINI_DST"
+            rm -f "${GEMINI_DST}.bak"
+            echo "" >> "$GEMINI_DST"
+            cat "$GEMINI_SRC" >> "$GEMINI_DST"
+            echo "  ✅ Layer 1: GEMINI.md — updated coordination instructions (--force)"
+        else
+            echo "  ℹ️  Layer 1: GEMINI.md already contains coordination instructions — skipped (use --force to update)"
+        fi
     else
         echo "" >> "$GEMINI_DST"
         cat "$GEMINI_SRC" >> "$GEMINI_DST"
@@ -71,8 +84,8 @@ mkdir -p "$CFG_DST/rules" "$CFG_DST/templates/agent-prompts" "$CFG_DST/workflows
 cp "$SRC/model_fallback.json" "$CFG_DST/model_fallback.json"
 echo "  ✅ Config: model_fallback.json"
 
-# Templates (handoff + swarm manifests)
-for tmpl in handoff_manifest.md swarm-manifest.md; do
+# Templates (handoff + swarm manifests + spec)
+for tmpl in handoff_manifest.md swarm-manifest.md spec.md; do
     if [ -f "$SRC/templates/$tmpl" ]; then
         cp "$SRC/templates/$tmpl" "$CFG_DST/templates/$tmpl"
         echo "  ✅ Template: $tmpl"
@@ -116,7 +129,16 @@ GI_DST="$HOME_DIR/.config/git/ignore"
 mkdir -p "$(dirname "$GI_DST")"
 if [ -f "$GI_DST" ]; then
     if grep -q "Agent Coordination\|Smart Handoff" "$GI_DST" 2>/dev/null; then
-        echo "  ℹ️  Global gitignore already contains coordination entries — skipped"
+        if [ "$FORCE" = true ]; then
+            sed -i.bak '/^# \(Agent Coordinator\|Smart Handoff\)/,/^# [^#]/{/^# [^#]/!d;}' "$GI_DST"
+            sed -i.bak -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$GI_DST"
+            rm -f "${GI_DST}.bak"
+            echo "" >> "$GI_DST"
+            cat "$SRC/gitignore-global" >> "$GI_DST"
+            echo "  ✅ Global gitignore — updated coordination entries (--force)"
+        else
+            echo "  ℹ️  Global gitignore already contains coordination entries — skipped (use --force to update)"
+        fi
     else
         echo "" >> "$GI_DST"
         cat "$SRC/gitignore-global" >> "$GI_DST"
@@ -129,7 +151,7 @@ fi
 git config --global core.excludesfile "$GI_DST"
 
 echo ""
-echo "🏷️  Model Tag Team installed successfully!"
+echo "🏷️  Agent Coordinator installed successfully!"
 echo ""
 echo "  Commands available:"
 echo "    /pivot      — Generate handoff manifest and switch models"

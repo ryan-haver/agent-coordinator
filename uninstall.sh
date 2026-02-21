@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
-# Model Tag Team — Uninstall Script (macOS/Linux)
+# Agent Coordinator — Uninstall Script (macOS/Linux)
 #
 # Removes all Agent Coordination files from deployment locations.
 # Does NOT delete the source project — only the deployed copies.
@@ -8,11 +8,11 @@
 # Usage: chmod +x uninstall.sh && ./uninstall.sh
 #
 
-set -e
+set -euo pipefail
 
 HOME_DIR="$HOME"
 
-echo "🏷️  Model Tag Team — Uninstalling..."
+echo "🏷️  Agent Coordinator — Uninstalling..."
 echo ""
 
 # 1. GEMINI.md — remove the coordination block, preserve other content
@@ -70,5 +70,5 @@ if [ -d "$CFG_DIR" ]; then
 fi
 
 echo ""
-echo "🏷️  Model Tag Team uninstalled."
+echo "🏷️  Agent Coordinator uninstalled."
 echo "  Note: Global gitignore at ~/.config/git/ignore was left intact."

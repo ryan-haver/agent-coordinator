@@ -1,4 +1,4 @@
-# Model Tag Team — Unified Project Roadmap
+# Agent Coordinator — Unified Project Roadmap
 
 ## Vision
 
@@ -41,7 +41,7 @@ Sourced from [Antigravity Cockpit](https://github.com/jlcodes99/vscode-antigravi
 
 | Phase | Name | Status | Effort |
 |-------|------|--------|--------|
-| **1A** | Core Merge | 🔜 Next | Foundation — minimum viable system |
+| **1A** | Core Merge | ✅ Complete | Foundation — minimum viable system |
 | **1B** | Enhanced Operations | After 1A | Supervision, autonomy, presets |
 | **2A** | NotebookLM Integration | After 1B | Research & persistent knowledge |
 | **2B** | Fusebase Integration | After 2A | Artifact storage, project docs, task tracking |

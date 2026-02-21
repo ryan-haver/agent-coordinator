@@ -28,7 +28,7 @@ $MISSION
 1. Read swarm-manifest.md
 2. Find your agent row and update status
 3. Read any prerequisite documents (plan.md, etc.)
-4. Read coordination rules from swarm-coordinator skill
+4. Read coordination rules from agent-coordination skill
 
 ## Your Scope
 - What you MAY edit
@@ -41,7 +41,7 @@ $MISSION
 ## Rules
 - Follow coordination rules
 - Role-specific constraints
-- Context limit handling (smart-handoff)
+- Context limit handling (agent-coordination)
 ```
 
 ## Available Prompts
@@ -50,6 +50,7 @@ $MISSION
 
 | Prompt | Role | Key Constraint |
 |--------|------|---------------|
+| `project-manager.md` | Coordination | Scopes, plans, enforces spec — does NOT write code |
 | `architect.md` | Planning | May NOT edit source code — only `plan.md` and docs |
 | `developer.md` | Implementation | Must stay within `$SCOPE`, must claim files first |
 | `qa.md` | Verification | May NOT edit production code — only tests and manifest |
@@ -59,8 +60,10 @@ $MISSION
 | Prompt | Role | When to Use |
 |--------|------|-------------|
 | `explorer.md` | Codebase discovery | Unfamiliar codebases, pre-architecture research |
-| `code-reviewer.md` | Diff review | When code quality and security review is needed post-implementation |
-| `debugger.md` | Root cause analysis | When specific bugs need targeted investigation and fixes |
+| `code-reviewer.md` | Diff review | Code quality and security review post-implementation |
+| `debugger.md` | Root cause analysis | Targeted bug investigation and fixes |
+| `devops.md` | Build/CI verification | Build checks, linting, CI/CD pipeline issues |
+| `researcher.md` | Research & knowledge | Web/drive research, source curation, NLM queries |
 
 ## Customizing Prompts
 

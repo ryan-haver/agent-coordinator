@@ -1,2 +1,3 @@
 # Agent workspace (local-only)
 .agent/
+.vscode/

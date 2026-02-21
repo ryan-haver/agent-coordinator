@@ -1,6 +1,6 @@
 # Customization Guide
 
-Model Tag Team ships with defaults tuned for a Claude + Gemini setup. Here's how to adapt it to your environment.
+Agent Coordinator ships with defaults tuned for a Claude + Gemini setup. Here's how to adapt it to your environment.
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: agent-coordination
-description: "Unified Agent Coordination System — manages context-aware model switching (handoff), multi-agent swarm operations, and cross-model consultation. Provides /pivot, /resume, /health, /swarm, /consult, and /status workflows."
+description: "Unified Agent Coordination System — manages context-aware model switching (handoff), multi-agent swarm operations, and cross-model consultation. Provides /pivot, /resume, /health, /swarm, and /swarm-auto workflows."
 ---
 
 # Unified Agent Coordination System

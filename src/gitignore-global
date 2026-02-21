@@ -1,7 +1,21 @@
-# Smart Handoff — prevent sensitive thought-trace artifacts from being committed
+# Agent Coordinator — prevent generated artifacts from being committed
+
+# Handoff artifacts
 handoff_active.md
 handoff_*.md
 context_summary_*.md
+
+# Swarm artifacts
+swarm-manifest.md
+swarm_status.json
+
+# Consultation artifacts
+consult_request.md
+consult_response.md
+
+# Swarm working documents
+spec.md
+plan.md
 
 # Antigravity configs
 .antigravity-configs/

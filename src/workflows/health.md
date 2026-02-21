@@ -65,7 +65,34 @@ for wf in pivot.md resume.md health.md swarm.md swarm-auto.md; do echo "$wf: $([
 - ✅ **GREEN**: All five workflows present
 - 🟡 **YELLOW**: Some workflows missing
 - 🔴 **RED**: All missing
-### 4. Bonus Checks
+
+### 4. Templates & Agent Prompts
+// turbo
+Verify templates and agent prompts are deployed:
+**Windows (PowerShell):**
+```powershell
+$cfgDir = "$env:USERPROFILE\.antigravity-configs\templates"
+echo "=== Templates ==="
+foreach ($t in @("handoff_manifest.md", "swarm-manifest.md", "spec.md")) { echo "$t`: $(Test-Path "$cfgDir\$t")" }
+echo "=== Agent Prompts ==="
+$prompts = Get-ChildItem "$cfgDir\agent-prompts" -Filter "*.md" -ErrorAction SilentlyContinue
+echo "Count: $($prompts.Count)"
+$prompts | ForEach-Object { echo "  $($_.Name)" }
+```
+**macOS/Linux (Bash):**
+```bash
+CFG_DIR="$HOME/.antigravity-configs/templates"
+echo "=== Templates ==="
+for t in handoff_manifest.md swarm-manifest.md spec.md; do echo "$t: $([ -f "$CFG_DIR/$t" ] && echo True || echo False)"; done
+echo "=== Agent Prompts ==="
+echo "Count: $(ls "$CFG_DIR/agent-prompts/"*.md 2>/dev/null | wc -l)"
+ls "$CFG_DIR/agent-prompts/"*.md 2>/dev/null | xargs -I{} basename {}
+```
+- ✅ **GREEN**: 3 templates + 9 agent prompts present
+- 🟡 **YELLOW**: Some templates or prompts missing
+- 🔴 **RED**: Templates directory missing
+
+### 5. Bonus Checks
 // turbo
 Verify supporting files:
 **Windows (PowerShell):**
@@ -87,7 +114,7 @@ echo "=== Gitignore Protection ==="
 if [ -f "$HOME/.config/git/ignore" ]; then grep "handoff" "$HOME/.config/git/ignore" || echo "NOT PROTECTED"; else echo "No global gitignore found"; fi
 ```
 
-### 5. Model Config Freshness
+### 6. Model Config Freshness
 // turbo
 Check if `model_fallback.json` models match the current Antigravity model selector.
 
@@ -113,7 +140,7 @@ Compare the configured model names against the Antigravity model selector. If mo
 - 🟡 **YELLOW**: Model versions appear outdated — recommend updating `model_fallback.json`
 - 🔴 **RED**: A configured tier model no longer exists in the selector
 
-### 6. Output Report
+### 7. Output Report
 
 Present the results in this format:
 

@@ -1,4 +1,4 @@
-# Model Tag Team — Unified Agent Coordination
+# Agent Coordinator — Unified Agent Coordination
 
 > **Multi-agent orchestration for Antigravity** — automatic model switching, supervised swarms, and cross-model consultation.
 
@@ -12,7 +12,7 @@ Coding with AI hits the same walls:
 
 ## The Solution
 
-Model Tag Team is a **3-part coordination system** installed into your Antigravity environment:
+Agent Coordinator is a **3-part coordination system** installed into your Antigravity environment:
 
 | Part | What It Does | When To Use |
 |------|-------------|-------------|
@@ -42,8 +42,8 @@ When stuck, agents follow this progression (cheapest first):
 
 ```powershell
 # Clone
-git clone https://github.com/ryan-haver/model-tag-team.git
-cd model-tag-team
+git clone https://github.com/ryan-haver/agent-coordinator.git
+cd agent-coordinator
 
 # Install (Windows)
 .\install.ps1
@@ -187,7 +187,7 @@ Problems found during execution with severity
 ## Project Structure
 
 ```
-model-tag-team/
+agent-coordinator/
 ├── install.ps1                            ← Windows installer
 ├── install.sh                             ← macOS/Linux installer
 ├── uninstall.ps1                          ← Windows uninstaller
@@ -240,7 +240,7 @@ See [ROADMAP.md](docs/ROADMAP.md) for the full plan:
 
 | Phase | Name | Status |
 |-------|------|--------|
-| **1A** | Core Merge (handoff + swarm) | 🔜 In Progress |
+| **1A** | Core Merge (handoff + swarm) | ✅ Complete |
 | **1B** | Enhanced Operations (supervision levels, presets) | Planned |
 | **2A** | NotebookLM Integration (research & knowledge) | Planned |
 | **2B** | Fusebase Integration (artifact storage) | Planned |

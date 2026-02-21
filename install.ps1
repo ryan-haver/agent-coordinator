@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Install or reinstall Model Tag Team into your Antigravity environment.
+    Install or reinstall Agent Coordinator into your Antigravity environment.
 .DESCRIPTION
     Copies all Agent Coordination files to their correct deployment locations:
     - GEMINI.md -> ~/.gemini/GEMINI.md
@@ -12,15 +12,17 @@
     - Global gitignore -> ~/.config/git/ignore
 .NOTES
     Safe to re-run. Uses -Force to overwrite existing files.
-    Run from the model-tag-team directory: .\install.ps1
+    Run from the agent-coordinator directory: .\install.ps1
+    Use -Force to update GEMINI.md and gitignore even if already present.
 #>
 
+param([switch]$Force)
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 $src = Join-Path $root "src"
 $home_ = $env:USERPROFILE
 
-Write-Host "Model Tag Team - Installing..." -ForegroundColor Cyan
+Write-Host "Agent Coordinator - Installing..." -ForegroundColor Cyan
 Write-Host ""
 
 # 0. Clean up old skill directory (smart-handoff -> agent-coordination)
@@ -37,7 +39,16 @@ New-Item -ItemType Directory -Force -Path (Split-Path $geminiDst) | Out-Null
 if (Test-Path $geminiDst) {
     $existing = Get-Content $geminiDst -Raw -ErrorAction SilentlyContinue
     if ($existing -and ($existing -match "Agent Coordination" -or $existing -match "Smart Handoff")) {
-        Write-Host "  Layer 1: GEMINI.md already contains coordination instructions - skipped" -ForegroundColor Yellow
+        if ($Force) {
+            $cleaned = $existing -replace '(?ms)\r?\n?# (Agent Coordination System|Global Smart Handoff).*?(?=\r?\n# [^#]|\z)', ''
+            $cleaned = $cleaned.Trim()
+            $coordContent = Get-Content $geminiSrc -Raw
+            if ($cleaned) { Set-Content $geminiDst "$cleaned`n`n$coordContent" } else { Set-Content $geminiDst $coordContent }
+            Write-Host "  Layer 1: GEMINI.md - updated coordination instructions (--force)" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  Layer 1: GEMINI.md already contains coordination instructions - skipped (use -Force to update)" -ForegroundColor Yellow
+        }
     }
     else {
         $coordContent = Get-Content $geminiSrc -Raw
@@ -78,8 +89,8 @@ New-Item -ItemType Directory -Force -Path "$cfgDst\rules", "$cfgDst\templates\ag
 Copy-Item (Join-Path $src "model_fallback.json") "$cfgDst\model_fallback.json" -Force
 Write-Host "  Config: model_fallback.json" -ForegroundColor Green
 
-# Templates (handoff + swarm manifests)
-foreach ($tmpl in @("handoff_manifest.md", "swarm-manifest.md")) {
+# Templates (handoff + swarm manifests + spec)
+foreach ($tmpl in @("handoff_manifest.md", "swarm-manifest.md", "spec.md")) {
     $tmplSrc = Join-Path $src "templates\$tmpl"
     if (Test-Path $tmplSrc) {
         Copy-Item $tmplSrc "$cfgDst\templates\$tmpl" -Force
@@ -127,7 +138,16 @@ New-Item -ItemType Directory -Force -Path (Split-Path $giDst) | Out-Null
 if (Test-Path $giDst) {
     $existing = Get-Content $giDst -Raw -ErrorAction SilentlyContinue
     if ($existing -and ($existing -match "Agent Coordination" -or $existing -match "Smart Handoff")) {
-        Write-Host "  Global gitignore already contains coordination entries - skipped" -ForegroundColor Yellow
+        if ($Force) {
+            $cleaned = $existing -replace '(?ms)\r?\n?# (Agent Coordinator|Smart Handoff).*?(?=\r?\n# [^#]|\z)', ''
+            $cleaned = $cleaned.Trim()
+            $ignoreContent = Get-Content (Join-Path $src "gitignore-global") -Raw
+            if ($cleaned) { Set-Content $giDst "$cleaned`n`n$ignoreContent" } else { Set-Content $giDst $ignoreContent }
+            Write-Host "  Global gitignore - updated coordination entries (--force)" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  Global gitignore already contains coordination entries - skipped (use -Force to update)" -ForegroundColor Yellow
+        }
     }
     else {
         $ignoreContent = Get-Content (Join-Path $src "gitignore-global") -Raw
@@ -142,7 +162,7 @@ else {
 git config --global core.excludesfile $giDst
 
 Write-Host ""
-Write-Host "Model Tag Team installed successfully!" -ForegroundColor Cyan
+Write-Host "Agent Coordinator installed successfully!" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Commands available:" -ForegroundColor White
 Write-Host "    /pivot      - Generate handoff manifest and switch models" -ForegroundColor Gray
