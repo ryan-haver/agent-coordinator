@@ -120,7 +120,6 @@ for rule in handoff.md context_compression.md; do
     echo "  ✅ Rule: $rule"
 done
 
-
 # 5. Rules symlink
 LINK_PATH="$HOME_DIR/.gemini/antigravity/rules"
 if [ ! -e "$LINK_PATH" ]; then

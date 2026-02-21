@@ -160,7 +160,13 @@ Pending issues, half-finished logic, known gotchas
 What was tried, why each approach failed, suggested alternatives
 
 ## Handoff Instructions
-Model persona, recovery checklist
+Model-specific briefings (context-heavy vs reasoning-heavy)
+
+## Incoming Model Persona
+Injected by /pivot — behavioral rules for the incoming model
+
+## Recovery Checklist
+Post-handoff verification steps
 ```
 
 ### Swarm Manifest

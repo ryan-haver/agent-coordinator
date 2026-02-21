@@ -12,7 +12,7 @@ Automatically compress completed conversation blocks into summary artifacts to e
 
 Monitor for context accumulation throughout every session. Trigger compression when:
 
-1. **Token Threshold**: Approximately every **50,000 tokens** of conversation history
+1. **Token Threshold**: Approximately every **50,000 tokens** of conversation history (configurable via `context_compression_interval_tokens` in `model_fallback.json`)
 2. **Task Completion**: When a major task or investigation is fully resolved
 3. **Mode Transition**: When switching from one major task to another (e.g., debugging → implementation)
 

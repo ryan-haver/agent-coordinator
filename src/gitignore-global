@@ -13,9 +13,11 @@ swarm_status.json
 consult_request.md
 consult_response.md
 
-# Swarm working documents (project root only)
-/spec.md
-/plan.md
+# Swarm working documents
+# Note: bare patterns are required in global gitignore (leading / anchors to HOME, not repo root)
+# Contributors: use `git add -f` for source templates like src/templates/spec.md
+spec.md
+plan.md
 
 # Antigravity configs
 .antigravity-configs/

@@ -123,7 +123,6 @@ foreach ($rule in @("handoff.md", "context_compression.md")) {
     Write-Host "  Rule: $rule" -ForegroundColor Green
 }
 
-
 # 5. Rules junction
 $junctionPath = Join-Path $home_ ".gemini\antigravity\rules"
 if (-not (Test-Path $junctionPath)) {
@@ -141,7 +140,7 @@ if (Test-Path $giDst) {
     $existing = Get-Content $giDst -Raw -ErrorAction SilentlyContinue
     if ($existing -and ($existing -match "Agent Coordination" -or $existing -match "Smart Handoff")) {
         if ($Force) {
-            $cleaned = $existing -replace '(?ms)\r?\n?# (Agent Coordinator|Smart Handoff).*?(?=\r?\n# [^#]|\z)', ''
+            $cleaned = $existing -replace '(?ms)\r?\n?# (Agent Coordinator|Agent Coordination|Smart Handoff).*?(?=\r?\n# [^#]|\z)', ''
             $cleaned = $cleaned.Trim()
             $ignoreContent = Get-Content (Join-Path $src "gitignore-global") -Raw
             if ($cleaned) { Set-Content $giDst "$cleaned`n`n$ignoreContent" } else { Set-Content $giDst $ignoreContent }
