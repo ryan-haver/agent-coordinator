@@ -1,186 +1,126 @@
 ---
-description: Coordinate a multi-agent swarm with human-in-the-loop phase gates. Generates a manifest and agent prompts for dispatch via Agent Manager.
+description: Coordinate a multi-agent swarm with various supervision levels. Includes support for autonomous execution, phase gates, presets, and programmatic manifest management via MCP.
 metadata:
   name: "swarm"
   scope: global
 ---
 
-# Multi-Agent Swarm (Supervised)
+# Multi-Agent Swarm
 
-You are now in **SWARM COORDINATOR MODE**. Your task: break a complex project into agent-scoped work, generate a manifest and prompts, and guide the user through phased dispatch.
+You are now in **SWARM COORDINATOR MODE**. Your task is to break a complex project down into agent-scoped work, generate the manifest, and orchestrate the dispatch of agents based on the requested supervision level and presets.
 
-## Task to Orchestrate
+Since you are the coordinator, you have access to the **agent-coordinator MCP tools** to orchestrate the swarm programmatically.
+
+## Configuration
 $ARGUMENTS
+
+Extract the following from $ARGUMENTS:
+1. **Task**: The core objective to be accomplished.
+2. **Supervision Level**:
+   - `--gates` = Level 2 (Gate Only: User approves between phases, agents run autonomous within phases)
+   - `--review-end` = Level 3 (Review on Completion: Agents run full pipeline, user reviews at the end)
+   - `--auto` = Level 4 (Full Autonomous: No gates, runs to completion, modifies VS Code settings)
+   - *Default* = Level 1 (Full Supervision: User reviews plan, code, and phases)
+3. **Preset**:
+   - `--preset=bugfix`: Debugger → QA
+   - `--preset=refactor`: Architect → Developer → Code Reviewer
+   - `--preset=feature`: PM → Architect → 2 Devs → Code Reviewer → QA
+   - `--preset=review`: Explorer → Code Reviewer
+   - `--preset=spike`: Explorer → Researcher → Architect
+   - *Default*: PM → Architect → Developer(s) → QA
 
 ---
 
-## Step 1: ANALYZE
+## Step 1: INITIALIZE & PLAN
 
-Break the task into agent assignments. Determine:
-
-1. **Which roles are needed?**
-   - Architect (always) — plans the approach
-   - Developer(s) — how many, and what scope for each?
-   - QA (always) — verifies the result
-   - Explorer (optional) — for unfamiliar codebases
-   - Code Reviewer (optional) — for detailed diff review and plan alignment
-   - Debugger (optional) — for targeted root cause analysis and bug fixes
-
-2. **What are the scope boundaries?**
-   - Which directories/files does each Developer own?
-   - Are there any shared files that need careful coordination?
-
-3. **What models should each agent use?**
-    - Read `~/.antigravity-configs/model_fallback.json` for current model names
-    - Default: Architect = Claude (Tier 1), Developer = Gemini Pro (Tier 2), QA = Gemini Flash (Tier 3)
-    - Adjust based on task complexity
-
-Present this breakdown to the user:
+1. Read `config://models` via MCP to determine the exact model names to use for assignments.
+2. Determine the agent roster based on the `Task` and `Preset` (if any).
+3. If `--auto` is specified:
+   - YOU MUST run the `auto_mode_toggle` script (located in `~/.gemini/antigravity/skills/agent-coordination/scripts/auto_mode_toggle.[ps1|sh]`) to backup and enable autonomous Antigravity settings.
+4. Call MCP tool `create_swarm_manifest` with the `mission` and `supervision_level`.
+5. Present the swarm plan to the user:
 
 ```
 📋 Swarm Plan for: [task summary]
+Mode: [Supervision Level]
+Preset: [Preset Name or Custom]
 
 Agents:
-  α Architect    → Claude (Tier 1)   → plan.md, docs
-  β Developer    → Gemini Pro (T2)   → /src/backend/**
-  γ Developer    → Gemini Pro (T2)   → /src/frontend/**
-  δ QA           → Gemini Flash (T3) → read-only, tests
+  α [Role]    → [Model]   → [Scope]
+  β [Role]    → [Model]   → [Scope]
+  ...
 
 Phases:
-  1. Planning:       α
-  2. Implementation: β, γ (parallel)
-  3. Verification:   δ
-
-Does this look right? (adjust agents/scope before we generate prompts)
+  1. [Phase Name]:  α
+  2. [Phase Name]:  β, γ
+  ...
 ```
 
-Wait for user confirmation before proceeding.
+**⏸️ GATE (Level 1 only)**: For Level 1, ask "Does this look right?". For Levels 2, 3, 4, proceed immediately.
 
 ---
 
-## Step 2: GENERATE MANIFEST
+## Step 2: EXECUTION PIPELINE
 
-After user confirms the agent plan:
+For each phase in your plan, do the following:
 
-1. Use the `swarm-manifest.md` template from the `agent-coordination` skill's `templates/` directory
-2. Write it to `swarm-manifest.md` in the project root
-3. Fill in:
-   - `$TIMESTAMP` → current timestamp
-   - `$MISSION` → the original task from $ARGUMENTS
-   - `## Agents` table → populated from the plan in Step 1
+### 2a. Dispatch Agents
+For each agent in the current phase:
+1. Call MCP `update_agent_status` to "🔄 Active".
+2. Call MCP `get_agent_prompt` to generate the populated prompt.
+3. If the supervision level is Level 2, 3, or 4 (or if instructing the user to dispatch in parallel), the branch strategy is:
+   - Base branch: `swarm/<slug>`
+   - Agent branch: `swarm/<slug>/<agent-id>` (for developers)
+4. Output the dispatch block:
+
+```
+📌 PHASE [X]: [PHASE NAME]
+Dispatch this agent via Agent Manager (Ctrl+E → New Task):
+Model: [Model Name]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[Prompt from get_agent_prompt]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Note on Auto Mode**: If `--auto` is specified, attempt to dispatch agents programmatically if the environment supports it, otherwise present the prompts cleanly for rapid human copy-paste.
+
+### 2b. Await Completion & Verify Gates
+1. You must wait for all agents in the current phase to finish.
+2. Call MCP tool `check_phase_gates` with the current phase number.
+3. If issues (`🔴 CONFLICT`, `🟠 BLOCKED`) are found via `get_swarm_status`:
+   - Follow Error Recovery: 1. Auto-Retry → 2. `/consult` → 3. Replace → 4. Escalate to user.
+
+**⏸️ GATE (Level 1 & 2)**: Wait for user to confirm the phase is complete before moving to the next phase ("Proceed to Phase [X+1]"). For Levels 3 and 4, proceed immediately if `check_phase_gates` is true.
 
 ---
 
-## Step 3: PHASE 1 — DISPATCH ARCHITECT
+## Step 3: SYNTHESIS & CLEANUP
 
-Generate a ready-to-paste prompt for the Architect agent:
+Once the final phase is complete:
 
-```
-📌 PHASE 1: PLANNING
-Model: Claude (Tier 1) — see model_fallback.json for exact name
-Paste this prompt into Agent Manager (Ctrl+E → New Task):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-[Insert populated architect.md prompt here with $MISSION, $AGENT_ID filled in]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-After dispatching, wait for the Architect to complete.
-Then review plan.md and come back here.
-```
-
-**⏸️ GATE**: Wait for user to confirm:
-- "Architect completed. I've reviewed plan.md. Proceed to Phase 2."
-
----
-
-## Step 4: PHASE 2 — DISPATCH DEVELOPERS
-
-Generate prompts for all Developer agents (users dispatch in parallel):
-
-```
-📌 PHASE 2: IMPLEMENTATION
-Dispatch these agents in parallel via Agent Manager:
-
-━━━ Agent β (Backend Developer) — Gemini Pro ━━━
-[Populated developer.md prompt with scope = /src/backend/**]
-
-━━━ Agent γ (Frontend Developer) — Gemini Pro ━━━
-[Populated developer.md prompt with scope = /src/frontend/**]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-After ALL developers complete, come back here.
-```
-
-**⏸️ GATE**: Wait for user to confirm:
-- "All developers completed. Proceed to Phase 3."
-
----
-
-## Step 5: PHASE 3 — DISPATCH QA
-
-Generate the QA agent prompt:
-
-```
-📌 PHASE 3: VERIFICATION
-Model: Gemini Flash (Tier 3) — see model_fallback.json for exact name
-Paste this prompt into Agent Manager:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-[Populated qa.md prompt]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-After QA completes, come back here for the final report.
-```
-
-**⏸️ GATE**: Wait for user to confirm:
-- "QA completed."
-
----
-
-## Step 6: SYNTHESIZE
-
-Read the final state of `swarm-manifest.md` and generate a report:
+1. Call MCP tool `get_swarm_status` to gather the final state.
+2. If `--auto` was used:
+   - YOU MUST run the `auto_mode_toggle --restore` script to revert the user's Antigravity settings back to normal.
+3. Generate the final Swarm Report:
 
 ```markdown
-## 🐝 Swarm Report
+## 🐝 Swarm Output: [Task]
 
-### Mission
-[Original task]
+### Result
+[Summary of what was achieved]
 
 ### Agents
-| ID | Role | Model | Status |
-|----|------|-------|--------|
-| α  | Architect | Claude (Tier 1) | ✅ |
-| β  | Developer (Backend) | Gemini Pro (Tier 2) | ✅ |
-| γ  | Developer (Frontend) | Gemini Pro (Tier 2) | ✅ |
-| δ  | QA | Gemini Flash (Tier 3) | ✅ |
+[Table of agents, models, and final status based on `get_swarm_status`]
 
-### Issues Found
-[List from ## Issues, or "None"]
-
-### Handoff Notes
-[Key context from ## Handoff Notes]
+### Issues Found & Resolved
+[List from issues tracking]
 
 ### Deliverables
-- [x] plan.md created
-- [x] Implementation complete
-- [x] QA verification done
-- [ ] User final review
+- [x] Phase 1
+- [x] Phase 2
+...
 
 ### Next Steps
-[Any remaining work or cleanup]
+[Any manual setup, deployment, or follow-up tasks for the user]
 ```
-
----
-
-## Quick Reference
-
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+E` | Open Agent Manager |
-| `New Task` | Create a new agent task |
-| Model dropdown | Select model for the agent |
-| Inbox | Check agent completion status |

@@ -1,123 +1,90 @@
 ---
-description: Fast multi-agent swarm — generates ALL agent prompts upfront for rapid sequential dispatch via Agent Manager. No interactive phase gates.
+description: Fast multi-agent swarm — generates ALL agent prompts upfront for rapid sequential dispatch via Agent Manager. Inherits all supervision and preset flags from /swarm.
 metadata:
   name: "swarm-auto"
   scope: global
 ---
 
-# Multi-Agent Swarm (Rapid Supervised)
+# Multi-Agent Swarm (Rapid Mode)
 
-You are now in **RAPID SWARM MODE**. Your task: break a complex project into agent-scoped work, generate the manifest and ALL agent prompts at once, so the user can dispatch them rapidly through Agent Manager.
+You are now in **RAPID SWARM MODE**. Your task is to break a complex project down into agent-scoped work, generate the manifest using the MCP tools, and output **ALL** agent prompts at once for rapid human dispatch or automated execution, depending on the requested supervision level.
 
-## Task to Orchestrate
+## Configuration
 $ARGUMENTS
 
+Extract the following from $ARGUMENTS, matching the logic of the standard `/swarm` command:
+1. **Task**: The core objective to be accomplished.
+2. **Supervision Level**:
+   - `--gates` = Level 2 (Gate Only: User approves between phases, agents run autonomously within phases)
+   - `--review-end` = Level 3 (Review on Completion: Agents run full pipeline, user reviews at the end)
+   - `--auto` = Level 4 (Full Autonomous: No gates, no approvals, modifies VS Code settings)
+   - *Default* = Level 1 (Full Supervision: User reviews plan, code, and phases)
+3. **Preset**:
+   - `--preset=bugfix`: Debugger → QA
+   - `--preset=refactor`: Architect → Developer → Code Reviewer
+   - `--preset=feature`: PM → Architect → 2 Devs → Code Reviewer → QA
+   - `--preset=review`: Explorer → Code Reviewer
+   - `--preset=spike`: Explorer → Researcher → Architect
+   - *Default*: PM → Architect → Developer(s) → QA
+
 ---
 
-## How This Differs from `/swarm`
+## Step 1: PLAN AND INITIALIZE
 
-| | `/swarm` (supervised) | `/swarm-auto` (rapid) |
-|---|---|---|
-| Prompt generation | One phase at a time | ALL phases upfront |
-| Phase gates | User confirms each | User dispatches sequentially |
-| Speed | Slower, more control | Faster, less hand-holding |
-| Best for | Critical/risky tasks | Familiar/well-scoped tasks |
-
----
-
-## Step 1: ANALYZE + PLAN
-
-Same analysis as `/swarm`:
-
-1. Determine roles, scope boundaries, and models (optional roles: Explorer, Code Reviewer, Debugger)
-2. Present the agent plan for quick confirmation:
+1. Read `config://models` via MCP to determine the exact model names to use for assignments.
+2. Determine the agent roster based on the `Task` and `Preset`, grouping them into logical Execution Phases.
+3. If `--auto` is specified:
+   - YOU MUST run the `auto_mode_toggle` script (located in `~/.gemini/antigravity/skills/agent-coordination/scripts/auto_mode_toggle.[ps1|sh]`) to backup and enable autonomous Antigravity settings.
+4. Call MCP tool `create_swarm_manifest` with the `mission` and `supervision_level`.
+5. Present the swarm plan for confirmation (ONLY IF Level 1 or 2 is used). If Level 3 or 4, proceed immediately.
 
 ```
 ⚡ Rapid Swarm for: [task summary]
+Mode: [Supervision Level]
+Preset: [Preset Name or Custom]
 
 Agents: α Architect (Claude) → β,γ Devs (Gemini Pro) → δ QA (Flash)
 Scope:  β=/src/backend/**  γ=/src/frontend/**
-
-Generate all prompts? (Y / adjust)
 ```
-
-Wait for user confirmation.
 
 ---
 
-## Step 2: GENERATE EVERYTHING
+## Step 2: GENERATE ALL PROMPTS
 
-After confirmation, generate the manifest AND all prompts in one output:
+Call MCP `get_agent_prompt` for every single agent defined in your roster. 
 
-### 2a. Write `swarm-manifest.md`
-1. Use the `swarm-manifest.md` template from the `agent-coordination` skill's `templates/` directory
-2. Write it to `swarm-manifest.md` in the project root
-3. Fill in:
-   - `$TIMESTAMP` → current timestamp
-   - `$MISSION` → the original task from $ARGUMENTS
-   - `## Agents` table → populated from key agents defined in Step 1
+If the supervision level is Level 2, 3, or 4 (or if instructed to dispatch in parallel), the branch strategy is:
+- Base branch: `swarm/<slug>`
+- Agent branch: `swarm/<slug>/<agent-id>` (for developers)
 
-### 2b. Output ALL Agent Prompts
+Output the prompts grouped by phase:
 
 ```
 ⚡ RAPID SWARM — ALL PROMPTS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📌 PHASE 1: Dispatch NOW
-Agent: α Architect | Model: Claude (Tier 1)
+📌 PHASE 1: [Phase Name] (Dispatch NOW)
+Agent: α [Role] | Model: [Model Name]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[Populated architect.md prompt]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📌 PHASE 2: Dispatch AFTER Architect completes
-Agent: β Backend Dev | Model: Gemini Pro (Tier 2)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-[Populated developer.md prompt with backend scope]
+[Populated prompt from get_agent_prompt]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Agent: γ Frontend Dev | Model: Gemini Pro (Tier 2)
+📌 PHASE 2: [Phase Name] (Dispatch AFTER Phase 1 completes)
+Agent: β [Role] | Model: [Model Name]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[Populated developer.md prompt with frontend scope]
+[Populated prompt from get_agent_prompt]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📌 PHASE 3: Dispatch AFTER ALL Devs complete
-Agent: δ QA | Model: Gemini Flash (Tier 3)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-[Populated qa.md prompt]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-### 2c. Dispatch Guide
-
-```
-🚀 DISPATCH ORDER:
-1. Ctrl+E → New Task → paste α prompt → set Claude (Tier 1) → go
-2. When α completes → New Task × 2 → paste β and γ → set Gemini Pro (Tier 2) → go
-3. When β+γ complete → New Task → paste δ → set Gemini Flash (Tier 3) → go
-4. When δ completes → come back here for report
+...
 ```
 
 ---
 
-## Step 3: FINAL REPORT
+## Step 3: COMPLETION / CLEANUP
 
-When user returns after all agents complete, read `swarm-manifest.md` and generate the same synthesis report as `/swarm` Step 6.
+If `--auto` was used, ensure the final agent (`QA` or `PM`) is instructed to run `auto_mode_toggle --restore` in their prompt to revert the user's Antigravity settings back to normal once the swarm finishes. 
 
----
-
-## Quick Reference
-
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+E` | Open Agent Manager |
-| `New Task` | Create a new agent task |
-| Model dropdown | Select model for the agent |
-| Inbox | Check agent completion status |
+Since you generated all the prompts up front, your job as the coordinator is done. The human user (or the `--auto` orchestrator) will take it from here.

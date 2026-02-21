@@ -17,16 +17,19 @@ $MISSION
 
 ## Your Task
 1. **Analyze** the user's request and break it into scoped work
-2. **Write `spec.md`** using the template at `~/.antigravity-configs/templates/spec.md`:
+2. **Setup Workspace** — create a new base branch for the swarm (`swarm/<task-slug>`)
+3. **Write `spec.md`** using the template at `~/.antigravity-configs/templates/spec.md`:
    - Acceptance criteria (checkboxes for QA to verify)
    - Constraints (what agents must NOT change)
    - Non-functional requirements
    - Out of scope
-3. **Select agents** — determine which roles and models are needed
+4. **Select agents** — determine which roles and models are needed
 4. **Populate the manifest** — fill in `## Agents` table with assignments, scopes, and phases
 5. **Present for approval** — show the spec and agent plan to the user
 6. **Monitor progress** — at each phase gate, check spec criteria and update manifest
 7. **Update the manifest** when done:
+7. **Finalize** — Once QA passes, prepare a merge request/PR from `swarm/<task-slug>` into `main` (if applicable)
+8. **Update the manifest** when done:
    - Set your status to `✅ Complete` in `## Agents`
    - Add context for subsequent agents in `## Handoff Notes`
 

@@ -71,16 +71,24 @@ else {
 }
 
 # 2. Skill (agent-coordination)
-$skillSrc = Join-Path $src "skill\SKILL.md"
-$skillDst = Join-Path $home_ ".gemini\antigravity\skills\agent-coordination\SKILL.md"
-New-Item -ItemType Directory -Force -Path (Split-Path $skillDst) | Out-Null
-Copy-Item $skillSrc $skillDst -Force
+$skillDir = Join-Path $home_ ".gemini\antigravity\skills\agent-coordination"
+$skillDst = Join-Path $skillDir "SKILL.md"
+New-Item -ItemType Directory -Force -Path $skillDir | Out-Null
+Copy-Item (Join-Path $src "skill\SKILL.md") $skillDst -Force
 Write-Host "  Layer 2: SKILL.md -> $skillDst" -ForegroundColor Green
+
+$scriptsSrc = Join-Path $src "scripts"
+if (Test-Path $scriptsSrc) {
+    $scriptsDst = Join-Path $skillDir "scripts"
+    New-Item -ItemType Directory -Force -Path $scriptsDst | Out-Null
+    Copy-Item "$scriptsSrc\*" $scriptsDst -Recurse -Force
+    Write-Host "  Layer 2: Scripts deployed to $scriptsDst" -ForegroundColor Green
+}
 
 # 3. Workflows (handoff + swarm)
 $wfDst = Join-Path $home_ ".gemini\antigravity\.agent\workflows"
 New-Item -ItemType Directory -Force -Path $wfDst | Out-Null
-foreach ($wf in @("pivot.md", "resume.md", "health.md", "swarm.md", "swarm-auto.md")) {
+foreach ($wf in @("pivot.md", "resume.md", "health.md", "swarm.md", "swarm-auto.md", "consult.md", "status.md")) {
     $wfSrc = Join-Path $src "workflows\$wf"
     if (Test-Path $wfSrc) {
         Copy-Item $wfSrc (Join-Path $wfDst $wf) -Force

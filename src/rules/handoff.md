@@ -26,17 +26,18 @@ Monitor for context overflow signals:
    ➡️ Switch to: {{TARGET_MODEL}} ({{TARGET_ROLE}})
    ```
 
-## Trigger 2: Reasoning Loop Detection (3+ Failures)
+## Trigger 2: Error Recovery Protocol (3+ Failures)
 
 Track failed attempts at the same task:
 - 3+ consecutive failed attempts at the same operation
 - Repeated "let me try a different approach" without progress
 - Going back and forth on the same design decision
 
-**When detected:**
-1. Acknowledge: `🔁 Reasoning loop detected — {{N}} failed attempts at: {{TASK}}`
-2. Follow the **Escalation Ladder** in the `agent-coordination` skill
-3. Document failures in the manifest `## Reasoning Failure` section
+**When detected, strictly follow this 4-step recovery protocol:**
+1. **Auto-Retry**: Retry the operation once with a fresh perspective, explicitly noting why the previous attempts failed.
+2. **Consult**: If the retry fails, use `/consult` to generate a `consult_request.md` and ask a different model (e.g. Claude for logic, Gemini Pro for context) for advice. Apply the response.
+3. **Replace/Handoff**: If the consultation fails to resolve the issue, execute a full handoff to a different model using the `handoff_active.md` manifest.
+4. **Escalate**: If you are in autonomous mode (`--auto`), or if the replacement model also gets stuck, flag the task as `🔴 BLOCKED` in the manifest and stop for user intervention.
 
 ## Trigger 3: Context Compression (Every ~50K Tokens)
 

@@ -18,11 +18,12 @@ $MISSION
 - You MAY read: everything in the codebase
 
 ## Your Task
-1. **Read `plan.md`** and identify the work items assigned to your agent ID
-2. **Claim files** before editing — add rows to `## File Claims` in the manifest
-3. **Implement** the planned changes within your scope
-4. **Write tests** for your changes if they fall within your scope
-5. **Update the manifest** when done:
+1. **Setup Workspace** — Checkout your agent-specific branch (e.g., `swarm/<slug>/<agent-id>`)
+2. **Read `plan.md`** and identify the work items assigned to your agent ID
+3. **Claim files** before editing — add rows to `## File Claims` in the manifest
+4. **Implement** the planned changes within your scope
+5. **Write tests** for your changes if they fall within your scope
+6. **Update the manifest** when done:
    - Set your status to `✅ Complete` in `## Agents`
    - Update file claims to `✅ Done`
    - If you're the last Developer → check `Phase 2` in `## Phase Gates`

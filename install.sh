@@ -70,15 +70,23 @@ else
 fi
 
 # 2. Skill (agent-coordination)
-SKILL_DST="$HOME_DIR/.gemini/antigravity/skills/agent-coordination/SKILL.md"
-mkdir -p "$(dirname "$SKILL_DST")"
+SKILL_DIR="$HOME_DIR/.gemini/antigravity/skills/agent-coordination"
+SKILL_DST="$SKILL_DIR/SKILL.md"
+mkdir -p "$SKILL_DIR"
 cp "$SRC/skill/SKILL.md" "$SKILL_DST"
 echo "  ✅ Layer 2: SKILL.md → $SKILL_DST"
 
-# 3. Workflows (handoff + swarm)
+if [ -d "$SRC/scripts" ]; then
+    mkdir -p "$SKILL_DIR/scripts"
+    cp -r "$SRC/scripts/"* "$SKILL_DIR/scripts/"
+    chmod +x "$SKILL_DIR/scripts/"*.sh 2>/dev/null || true
+    echo "  ✅ Layer 2: Scripts deployed to $SKILL_DIR/scripts"
+fi
+
+# 3. Workflows (handoff + swarm + operations)
 WF_DST="$HOME_DIR/.gemini/antigravity/.agent/workflows"
 mkdir -p "$WF_DST"
-for wf in pivot.md resume.md health.md swarm.md swarm-auto.md; do
+for wf in pivot.md resume.md health.md swarm.md swarm-auto.md consult.md status.md; do
     if [ -f "$SRC/workflows/$wf" ]; then
         cp "$SRC/workflows/$wf" "$WF_DST/$wf"
         echo "  ✅ Workflow: $wf"
