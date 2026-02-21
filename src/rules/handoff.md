@@ -1,18 +1,18 @@
 ---
-description: Global Smart Handoff — monitors context usage, detects reasoning loops, and triggers automatic fallback-aware model handoffs
+description: Agent Coordination — monitors context usage, detects reasoning loops, and triggers automatic fallback-aware model handoffs
 alwaysApply: true
 ---
 
-# Global Smart Handoff Rule (Fallback-Aware)
+# Agent Coordination — Handoff Rule (Fallback-Aware)
 
 ## Model Fallback Chain
-Read the fallback chain from `~/.antigravity-configs/model_fallback.json`:
+Read exact model names from `~/.antigravity-configs/model_fallback.json`:
 
-| Tier | Model | Role |
-|------|-------|------|
-| 1 | `claude-opus-latest` | **The Architect** — deep reasoning, precision |
-| 2 | `gemini-3-pro-high` | **The Context King** — large context, multi-file |
-| 3 | `gemini-3-flash` | **The Speed Specialist** — fast iteration |
+| Tier | Family | Role |
+|------|--------|------|
+| 1 | Claude (Opus) | **The Architect** — deep reasoning, precision |
+| 2 | Gemini (Pro) | **The Context King** — large context, multi-file |
+| 3 | Gemini (Flash) | **The Speed Specialist** — fast iteration |
 
 **Policies:**
 - `on_context_limit: "handoff_and_resume"` — automatically generate manifest and handoff
@@ -38,13 +38,23 @@ When context saturation is detected:
 3. **Save manifest** to:
    - `<appDataDir>/brain/<conversation-id>/handoff_active.md` (artifact)
    - `~/.antigravity-configs/handoff_active.md` (global)
-4. **Determine the fallback target** based on current model:
+4. **Determine the fallback target** using task-aware routing:
 
-   | Current Model | Handoff To | Reason |
-   |---------------|------------|--------|
-   | Claude (Tier 1) | **Gemini 3 Pro** (Tier 2) | Context relief — Gemini has bigger window |
-   | Gemini 3 Pro (Tier 2) | **Gemini 3 Flash** (Tier 3) | Even Gemini Pro is full — use Flash for fast completion |
-   | Gemini 3 Flash (Tier 3) | **Claude** (Tier 1) | Cycle back — task may need deeper reasoning in fresh context |
+   Read `~/.antigravity-configs/model_fallback.json` for the `task_routing` section.
+
+   **For context overflow (this trigger):**
+   | Current Model | Default Handoff | Override If... |
+   |---------------|----------------|----------------|
+   | Claude (Tier 1) | **Gemini Pro** (Tier 2) | Remaining work is simple → use Flash |
+   | Gemini Pro (Tier 2) | **Claude** (Tier 1) | Fresh reasoning in smaller window |
+   | Gemini Flash (Tier 3) | **Gemini Pro** (Tier 2) | Need more context headroom |
+
+   **Classify remaining work and adjust:**
+   | Remaining Work Type | Best Target |
+   |---------------------|-------------|
+   | Deep debugging, logic bugs | Claude |
+   | Large refactoring, multi-file | Gemini Pro |
+   | Docs, formatting, quick fixes | Gemini Flash |
 
 5. **Alert the user:**
    ```
@@ -81,8 +91,8 @@ When a reasoning loop is detected:
 
 2. **Determine escalation target** based on fallback chain:
    - If current model is **Flash** (Tier 3) → escalate to **Pro** (Tier 2)
-   - If current model is **Pro** (Tier 2) → escalate to **Claude** (Tier 1)
-   - If current model is **Claude** (Tier 1) → escalate to **Pro** (Tier 2) with explicit context about the reasoning difficulty
+   - If current model is **Pro** (Tier 2) → escalate to **Claude** (Tier 1) for deeper reasoning
+   - If current model is **Claude** (Tier 1) → hand off to **Pro** (Tier 2) for fresh perspective with larger context window (Claude is already the deepest reasoner — a different model may see the problem differently)
 
 3. **Generate the manifest** with a `## Reasoning Failure` section:
    ```markdown

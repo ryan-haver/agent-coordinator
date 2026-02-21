@@ -2,7 +2,7 @@
 description: Pivot — summarize current work, generate fallback-aware handoff manifest, and prepare for model switch with persona targeting
 ---
 
-# /pivot — Smart Handoff Pivot
+# /pivot — Agent Coordination Pivot
 
 Use this workflow to proactively switch models mid-task. Generates a fallback-aware manifest with model-specific instructions.
 
@@ -22,16 +22,29 @@ Document everything that remains:
 - TODOs left in the code
 - Questions needing user input
 
-### 3. Detect the Correct Fallback Target
-Read `~/.antigravity-configs/model_fallback.json` and determine the handoff target:
+### 3. Classify Remaining Work
+Categorize the pending work from Step 2 into one of these types:
 
-| Current Model | Default Handoff | Override If... |
-|---------------|----------------|----------------|
-| Claude (Tier 1) | Gemini 3 Pro (Tier 2) | Use Flash if remaining work is simple |
-| Gemini 3 Pro (Tier 2) | Claude (Tier 1) | Use Flash if context is the issue |
-| Gemini 3 Flash (Tier 3) | Claude (Tier 1) | Use Pro if context is needed |
+| Category | Signals |
+|----------|---------|
+| **Deep/Complex** | Logic bugs, subtle errors, architectural decisions, edge cases |
+| **Broad/Multi-file** | Refactoring across files, dependency tracing, pattern search |
+| **Simple/Fast** | Docs, formatting, config changes, typos, quick fixes |
 
-### 4. Generate the Manifest with Model Profile
+### 4. Select the Best Model for the Work
+Read `~/.antigravity-configs/model_fallback.json` and route based on the task classification:
+
+| Remaining Work | Default Target | Override If... |
+|----------------|---------------|----------------|
+| Deep/Complex | Claude (Tier 1) | Already on Claude → use Gemini Pro for fresh context |
+| Broad/Multi-file | Gemini Pro (Tier 2) | Already on Gemini Pro → use Claude for fresh reasoning |
+| Simple/Fast | Gemini Flash (Tier 3) | Need more reasoning depth → use Claude instead |
+| Mixed (multiple types) | Match the **dominant** remaining task type | |
+
+> [!TIP]
+> If context overflow caused the pivot, prefer the model with the largest available window regardless of task type.
+
+### 5. Generate the Manifest with Model Profile
 
 Fill out `~/.antigravity-configs/templates/handoff_manifest.md` and **inject the correct model persona** into the Handoff Instructions section.
 
@@ -77,18 +90,18 @@ Fill out `~/.antigravity-configs/templates/handoff_manifest.md` and **inject the
 > 5. Prioritize correctness over speed — verify your reasoning before implementing
 > ```
 
-### 5. Save the Manifest
+### 6. Save the Manifest
 Save to both locations:
 - `<appDataDir>/brain/<conversation-id>/handoff_active.md` (artifact)
 - `~/.antigravity-configs/handoff_active.md` (global)
 
-### 6. Archive Session State
+### 7. Archive Session State
 Update `task.md` artifact:
 - Mark completed items with `[x]`
 - Mark interrupted items with `[/]` and note why
 - Add `## Handoff` section linking to the manifest
 
-### 7. Prompt the User
+### 8. Prompt the User
 ```
 🔄 Handoff manifest ready!
 

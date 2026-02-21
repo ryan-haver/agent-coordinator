@@ -1,13 +1,13 @@
 {
   "model_fallback_chain": {
-    "description": "Global model hierarchy for the Smart Handoff System",
+    "description": "Global model hierarchy for the Agent Coordination System. Model names match the Antigravity model selector.",
     "tiers": [
       {
         "tier": 1,
         "role": "The Architect",
-        "model": "google-antigravity/claude-opus-latest",
+        "model": "Claude Opus 4.6 (Thinking)",
         "strengths": [
-          "Deep reasoning",
+          "Deep reasoning with extended thinking",
           "Architectural decisions",
           "Subtle debugging",
           "DRY principles"
@@ -17,7 +17,7 @@
       {
         "tier": 2,
         "role": "The Context King",
-        "model": "google-antigravity/gemini-3-pro-high",
+        "model": "Gemini 3.1 Pro (High)",
         "strengths": [
           "Large context window",
           "Multi-file scanning",
@@ -29,7 +29,7 @@
       {
         "tier": 3,
         "role": "The Speed Specialist",
-        "model": "google-antigravity/gemini-3-flash",
+        "model": "Gemini 3 Flash",
         "strengths": [
           "Fast iteration",
           "Simple tasks",
@@ -40,6 +40,83 @@
         "use_when": "Simple cleanup, docs, formatting, low-complexity changes"
       }
     ],
+    "available_models": {
+      "description": "Full catalog of models in the Antigravity model selector. Swap tiers by changing the model field above.",
+      "models": [
+        {
+          "name": "Claude Opus 4.6 (Thinking)",
+          "family": "claude",
+          "tier_recommendation": 1,
+          "notes": "Deepest reasoner, extended thinking"
+        },
+        {
+          "name": "Claude Sonnet 4.6 (Thinking)",
+          "family": "claude",
+          "tier_recommendation": 2,
+          "notes": "Fast reasoning with thinking, good balance"
+        },
+        {
+          "name": "Gemini 3.1 Pro (High)",
+          "family": "gemini",
+          "tier_recommendation": 2,
+          "notes": "Latest Gemini Pro, high quality mode"
+        },
+        {
+          "name": "Gemini 3.1 Pro (Low)",
+          "family": "gemini",
+          "tier_recommendation": 3,
+          "notes": "Latest Gemini Pro, faster/cheaper mode"
+        },
+        {
+          "name": "Gemini 3 Flash",
+          "family": "gemini",
+          "tier_recommendation": 3,
+          "notes": "Fast iteration, speed over depth"
+        },
+        {
+          "name": "Gemini 3 Pro Image",
+          "family": "gemini",
+          "tier_recommendation": 2,
+          "notes": "Image-capable Gemini Pro"
+        },
+        {
+          "name": "GPT-OSS 120B (Medium)",
+          "family": "gpt",
+          "tier_recommendation": 2,
+          "notes": "Open-source GPT, medium quality"
+        }
+      ]
+    },
+    "discovery": {
+      "description": "How to detect available models dynamically. The Antigravity language server provides the live model list.",
+      "state_db": {
+        "windows": "%APPDATA%/Antigravity/User/globalStorage/state.vscdb",
+        "macos": "~/Library/Application Support/Antigravity/User/globalStorage/state.vscdb",
+        "linux": "~/.config/Antigravity/User/globalStorage/state.vscdb"
+      },
+      "api_endpoint": "/exa.language_server_pb.LanguageServerService/GetUserStatus",
+      "notes": "The language server returns ClientModelConfig objects with label, modelId, quotaInfo. The Antigravity Cockpit extension (jlcodes.antigravity-cockpit) reads this live. If the available_models list looks stale, run /health to verify."
+    },
+    "task_routing": {
+      "description": "Maps remaining work type to the best model for that work",
+      "routes": {
+        "deep_debugging": "Claude Opus 4.6 (Thinking)",
+        "architecture_design": "Claude Opus 4.6 (Thinking)",
+        "edge_case_analysis": "Claude Opus 4.6 (Thinking)",
+        "large_refactoring": "Gemini 3.1 Pro (High)",
+        "multi_file_scanning": "Gemini 3.1 Pro (High)",
+        "cross_file_patterns": "Gemini 3.1 Pro (High)",
+        "docs_formatting": "Gemini 3 Flash",
+        "quick_fixes": "Gemini 3 Flash",
+        "simple_cleanup": "Gemini 3 Flash"
+      }
+    },
+    "trigger_routing": {
+      "description": "Overrides task routing when specific triggers fire",
+      "context_overflow": "largest_context_window",
+      "reasoning_loop": "deepest_reasoner",
+      "user_initiated": "task_based"
+    },
     "policies": {
       "on_context_limit": "handoff_and_resume",
       "on_reasoning_failure": "escalate",

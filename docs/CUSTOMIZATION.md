@@ -107,24 +107,37 @@ If you want to add other global instructions, **append to GEMINI.md** rather tha
 
 ---
 
-## MEMORY Rule (Optional Enhancement)
+## MEMORY Rule (Automatic)
 
-For maximum reliability, you can add a MEMORY rule to your Antigravity user settings. This ensures the handoff system is referenced in the system prompt of every session, even if GEMINI.md isn't loaded:
+The install script deploys `GEMINI.md` to `~/.gemini/GEMINI.md`. Antigravity automatically loads this file as `MEMORY[GEMINI.md]` in every session — **no manual setup required**.
 
+This gives every model, every session:
+- Identity awareness (which tier/role it plays)
+- Active manifest detection (checks for pending handoffs)
+- Command knowledge (`/pivot`, `/resume`)
+
+If you need to verify the MEMORY rule is active, check for `MEMORY[GEMINI.md]` in your Antigravity session's context.
+
+---
+
+## Task Routing Customization
+
+The `task_routing` section in `model_fallback.json` maps work categories to models. You can customize these mappings to match your workflow:
+
+```json
+"task_routing": {
+  "routes": {
+    "deep_debugging": "claude-4-opus",
+    "architecture_design": "claude-4-opus",
+    "large_refactoring": "gemini-3-pro-image",
+    "multi_file_scanning": "gemini-3-pro-image",
+    "docs_formatting": "gemini-3-flash-image",
+    "quick_fixes": "gemini-3-flash-image"
+  }
+}
 ```
-MEMORY[user_global]:
-# Global Smart Handoff — Context Monitoring
 
-You have a Smart Handoff System installed as a skill at `~/.gemini/antigravity/skills/smart-handoff/SKILL.md`. 
-
-**Always-on behavior:** If you notice your own context degrading (forgetting earlier decisions, needing to re-read files, repeating analysis, or failing 3+ times at the same task), read the `smart-handoff` skill and follow its handoff protocol. Do not wait for the user to notice — proactively flag it.
-
-**Available commands:**
-- `/pivot` — Proactively generate a handoff manifest and prepare for model switch
-- `/resume` — Read the active handoff manifest and continue where the last model left off
-```
-
-How to set this depends on your Antigravity version. Check your agent settings for a "Memory" or "User Rules" section.
+Add new categories or reassign models as needed. The agent reads this file during `/pivot` to determine the best handoff target.
 
 ---
 
@@ -133,7 +146,7 @@ How to set this depends on your Antigravity version. Check your agent settings f
 | Feature | Windows | macOS/Linux |
 |---------|---------|-------------|
 | Install script | `.\install.ps1` | `./install.sh` |
-| Uninstall | `.\uninstall.ps1` | Manual (rm the files) |
+| Uninstall | `.\uninstall.ps1` | `./uninstall.sh` |
 | Rules link | Junction (`mklink /J`) | Symlink (`ln -s`) |
 | Home dir | `%USERPROFILE%` | `$HOME` |
 | Config path | `~\.antigravity-configs\` | `~/.antigravity-configs/` |

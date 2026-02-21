@@ -2,7 +2,7 @@
 description: Resume — read the active handoff manifest, adopt the assigned persona, and continue where the previous model left off
 ---
 
-# /resume — Smart Handoff Resume
+# /resume — Agent Coordination Resume
 
 Use this at the start of a new session after a model switch. Reads the manifest, adopts your assigned persona, and continues seamlessly.
 
@@ -11,13 +11,31 @@ Use this at the start of a new session after a model switch. Reads the manifest,
 ### 1. Locate the Active Manifest
 // turbo
 Check for the handoff manifest:
-```
+
+**macOS/Linux:**
+```bash
 cat ~/.antigravity-configs/handoff_active.md
 ```
-If not found, check recent conversation artifact directories for `handoff_active.md`.
+**Windows (PowerShell):**
+```powershell
+Get-Content "$env:USERPROFILE\.antigravity-configs\handoff_active.md"
+```
+If not found at the global path, search conversation artifact directories:
+
+**macOS/Linux:**
+```bash
+find ~/.gemini/antigravity/brain -name "handoff_active.md" -type f 2>/dev/null | head -5
+```
+**Windows (PowerShell):**
+```powershell
+Get-ChildItem -Path "$env:USERPROFILE\.gemini\antigravity\brain" -Recurse -Filter "handoff_active.md" -ErrorAction SilentlyContinue | Select-Object -First 5
+```
+
+If multiple are found, use the most recently modified one.
 
 ### 2. Read and Parse the Manifest
 Read the full manifest. Extract:
+- **Routing Decision** — why you were selected and what type of work remains
 - **Current Objective** — what we're trying to accomplish
 - **Last Successful Action** — where the previous model stopped
 - **Active Files** — which files need attention
@@ -89,9 +107,16 @@ Shall I proceed?
 After user confirms:
 // turbo
 Rename to prevent stale pickup:
+
+**Windows (PowerShell):**
 ```powershell
 $ts = Get-Date -Format "yyyyMMdd_HHmmss"
 Move-Item "$env:USERPROFILE\.antigravity-configs\handoff_active.md" "$env:USERPROFILE\.antigravity-configs\handoff_$ts.md"
+```
+**macOS/Linux (Bash):**
+```bash
+ts=$(date +"%Y%m%d_%H%M%S")
+mv ~/.antigravity-configs/handoff_active.md ~/.antigravity-configs/handoff_$ts.md
 ```
 
 ### 9. Begin Work

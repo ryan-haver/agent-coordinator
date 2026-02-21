@@ -2,7 +2,7 @@
 .SYNOPSIS
     Uninstall Model Tag Team from your Antigravity environment.
 .DESCRIPTION
-    Removes all Tag Team files from deployment locations.
+    Removes all Agent Coordination files from deployment locations.
     Does NOT delete the source project — only the deployed copies.
 .NOTES
     Run from the model-tag-team directory: .\uninstall.ps1
@@ -14,23 +14,34 @@ $home_ = $env:USERPROFILE
 Write-Host "🏷️  Model Tag Team — Uninstalling..." -ForegroundColor Cyan
 Write-Host ""
 
-# 1. GEMINI.md — clear contents (don't delete, it may have other content)
+# 1. GEMINI.md — remove the coordination block, preserve other content
 $gemini = Join-Path $home_ ".gemini\GEMINI.md"
 if (Test-Path $gemini) {
-    Set-Content $gemini ""
-    Write-Host "  ✅ Cleared GEMINI.md" -ForegroundColor Green
+    $content = Get-Content $gemini -Raw -ErrorAction SilentlyContinue
+    if ($content -and ($content -match "Agent Coordination" -or $content -match "Smart Handoff")) {
+        # Remove coordination block (either old or new naming)
+        $cleaned = $content -replace '(?ms)\r?\n?# (Agent Coordination System|Global Smart Handoff).*?(?=\r?\n# [^#]|\z)', ''
+        $cleaned = $cleaned.Trim()
+        if ($cleaned) { Set-Content $gemini $cleaned } else { Set-Content $gemini "" }
+        Write-Host "  ✅ Removed coordination block from GEMINI.md" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  ℹ️  GEMINI.md has no coordination content — skipped" -ForegroundColor Yellow
+    }
 }
 
-# 2. Skill
-$skillDir = Join-Path $home_ ".gemini\antigravity\skills\smart-handoff"
-if (Test-Path $skillDir) {
-    Remove-Item $skillDir -Recurse -Force
-    Write-Host "  ✅ Removed smart-handoff skill" -ForegroundColor Green
+# 2. Skill (both old and new names)
+foreach ($name in @("agent-coordination", "smart-handoff")) {
+    $skillDir = Join-Path $home_ ".gemini\antigravity\skills\$name"
+    if (Test-Path $skillDir) {
+        Remove-Item $skillDir -Recurse -Force
+        Write-Host "  ✅ Removed $name skill" -ForegroundColor Green
+    }
 }
 
 # 3. Workflows
 $wfDir = Join-Path $home_ ".gemini\antigravity\.agent\workflows"
-foreach ($wf in @("pivot.md", "resume.md", "health.md")) {
+foreach ($wf in @("pivot.md", "resume.md", "health.md", "swarm.md", "swarm-auto.md")) {
     $p = Join-Path $wfDir $wf
     if (Test-Path $p) { Remove-Item $p -Force; Write-Host "  ✅ Removed $wf" -ForegroundColor Green }
 }
