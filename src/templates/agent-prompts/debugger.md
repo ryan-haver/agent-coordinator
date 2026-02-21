@@ -36,3 +36,4 @@ $MISSION
 - Prefer minimal, targeted fixes over broad refactors
 - Document your diagnosis clearly so others can learn from the bug
 - If you hit context limits, follow the `agent-coordination` protocol AND update `## Handoff Notes`
+- If you need project-scale context (e.g. "has this bug pattern been seen before?"), query the project notebook: `nlm notebook query <alias> "your question"`

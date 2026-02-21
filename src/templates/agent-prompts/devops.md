@@ -43,3 +43,4 @@ $MISSION
 - Respect scope — only touch build/CI/deployment files
 - Flag blockers in `## Issues` with severity
 - If you hit context limits, follow the `agent-coordination` protocol AND update `## Handoff Notes`
+- If you need project-scale context (e.g. deployment goals), query the project notebook: `nlm notebook query <alias> "your question"`

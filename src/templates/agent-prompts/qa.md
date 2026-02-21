@@ -43,3 +43,4 @@ $MISSION
 - Be thorough — you are the last line of defense before the user reviews
 - If critical issues are found (`🔴`), clearly call them out in `## Issues`
 - If you hit context limits, follow the `agent-coordination` protocol AND update `## Handoff Notes`
+- If you need project-scale context or acceptance criteria clarification, query the project notebook: `nlm notebook query <alias> "your question"`

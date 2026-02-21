@@ -34,3 +34,4 @@ $MISSION
 - Follow ALL coordination rules in the `agent-coordination` skill
 - If you discover the task is too ambiguous or too large, note it in `## Issues`
 - If you hit context limits, follow the `agent-coordination` protocol AND update `## Handoff Notes`
+- If you need project-scale context or historical decisions, query the project notebook: `nlm notebook query <alias> "your question"`

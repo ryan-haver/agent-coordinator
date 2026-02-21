@@ -9,6 +9,16 @@ $MISSION
 Supervision: supervised
 Auto-merge: false
 
+## Notebook
+<!-- Track NotebookLM usage and source limits -->
+| Field | Value |
+|-------|-------|
+| Notebook ID | |
+| Alias | |
+| Plan Limit | 300 sources (Pro) |
+| Current Sources | |
+| Headroom | |
+
 ## Agents
 
 | ID | Role | Model | Scope | Status | Phase |

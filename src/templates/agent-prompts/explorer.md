@@ -40,3 +40,4 @@ $MISSION
 - You are read-only — do NOT create or modify any project files
 - Focus on information that helps the Architect make better decisions
 - If you hit context limits, follow the `agent-coordination` protocol AND update `## Handoff Notes`
+- If you need project-scale context to map the codebase, query the project notebook: `nlm notebook query <alias> "your question"`

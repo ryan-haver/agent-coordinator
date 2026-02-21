@@ -228,6 +228,15 @@ Phase 3: VERIFICATION      → QA (+ optional Code Reviewer, DevOps)
 Done: PM reviews manifest and generates final report
 ```
 
+### Cross-Project Knowledge (NotebookLM)
+
+Each swarm project maintains a NotebookLM notebook. When starting a NEW project, PMs and Architects should query historical project notebooks for established patterns and decisions:
+
+1. List available projects: `nlm notebook list`
+2. Query an old project: `nlm notebook query <historical-project-alias> "What pattern was used for X?"`
+
+This prevents the swarm from reinventing the wheel on every new initiative.
+
 ---
 
 ## Part 3: Consultation Protocol
@@ -245,6 +254,8 @@ When an agent is stuck (3+ attempts failed), before a full handoff:
 3. The consultant reads ONLY `consult_request.md`, writes `consult_response.md`, and is done
 
 4. The original agent reads the response and continues with full context intact
+
+---
 
 ## Part 4: MCP Coordination Server
 

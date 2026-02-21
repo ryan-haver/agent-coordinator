@@ -41,3 +41,4 @@ $MISSION
 - Be thorough — include specific code examples for suggested fixes
 - If critical issues are found (`🔴`), clearly call them out in `## Issues`
 - If you hit context limits, follow the `agent-coordination` protocol AND update `## Handoff Notes`
+- If you need project-scale context (e.g. constraints defined in the spec), query the project notebook: `nlm notebook query <alias> "your question"`

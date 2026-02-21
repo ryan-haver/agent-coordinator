@@ -32,6 +32,7 @@ $MISSION
 ## Rules
 - Follow ALL coordination rules in the `agent-coordination` skill
 - **NEVER** edit a file claimed by another agent — add to `## Issues` instead
-- If `plan.md` is unclear about something in your scope, make a reasonable decision and note it in `## Handoff Notes`
+- If `plan.md` is unclear about something in your scope, make a reasonable decision within your scope and note it in `## Handoff Notes`
 - If you discover a bug or design issue, add it to `## Issues` with severity
 - If you hit context limits, follow the `agent-coordination` protocol AND update `## Handoff Notes`
+- If you need project-scale context (like API specs or architectural decisions) that aren't in `plan.md`, query the project notebook: `nlm notebook query <alias> "your question"`
