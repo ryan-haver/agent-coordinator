@@ -61,7 +61,7 @@ function writeSwarmStatus(rootDir: string, md: string, lastEvent: string) {
 
         // Determine current phase from agent statuses
         const activeAgent = agents.find(a => a["Status"]?.includes("Active"));
-        const phase = activeAgent?.Phase || (complete === agents.length ? "done" : "0");
+        const phase = activeAgent?.["Phase"] || (complete === agents.length ? "done" : "0");
 
         const statusObj = {
             task,
@@ -71,6 +71,7 @@ function writeSwarmStatus(rootDir: string, md: string, lastEvent: string) {
             agents_complete: complete,
             agents_pending: pending,
             last_event: lastEvent,
+            needs_user_action: false,
             timestamp: new Date().toISOString()
         };
         fs.writeFileSync(path.join(rootDir, "swarm_status.json"), JSON.stringify(statusObj, null, 2));
@@ -292,7 +293,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             row["Status"] = status;
 
             const newTable = serializeTableToString(res.headers, res.rows);
-            md = replaceTableInSection(md, "Agents", newTable)!;
+            const updated = replaceTableInSection(md, "Agents", newTable);
+            if (!updated) throw new Error("Failed to replace Agents table — section may be malformed");
+            md = updated;
             writeManifest(workspaceRoot, md);
             writeSwarmStatus(workspaceRoot, md, `Agent ${agent_id} status updated to ${status}`);
             return { toolResult: `Agent ${agent_id} status updated to ${status}`, content: [{ type: "text", text: `Agent ${agent_id} status updated to ${status}` }] };
@@ -335,13 +338,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 "Status": "🔄 Active"
             });
 
-            md = replaceTableInSection(md, "File Claims", serializeTableToString(res.headers, res.rows))!;
+            const updatedClaim = replaceTableInSection(md, "File Claims", serializeTableToString(res.headers, res.rows));
+            if (!updatedClaim) throw new Error("Failed to replace File Claims table — section may be malformed");
+            md = updatedClaim;
             writeManifest(workspaceRoot, md);
             return { toolResult: `File ${file_path} claimed by ${agent_id}`, content: [{ type: "text", text: `File ${file_path} claimed by ${agent_id}` }] };
         }
 
         if (name === "check_file_claim") {
-            const { file_path } = args as any;
+            const file_path = (args as any)?.file_path;
+            if (!file_path) throw new Error("Missing required argument: file_path");
             const md = readManifest(workspaceRoot);
             const res = getTableFromSection(md, "File Claims");
             if (!res) throw new Error("File Claims section not found");
@@ -363,7 +369,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             if (!row) throw new Error(`Active claim for ${file_path} by ${agent_id} not found`);
             row["Status"] = status;
 
-            md = replaceTableInSection(md, "File Claims", serializeTableToString(res.headers, res.rows))!;
+            const updatedRelease = replaceTableInSection(md, "File Claims", serializeTableToString(res.headers, res.rows));
+            if (!updatedRelease) throw new Error("Failed to replace File Claims table — section may be malformed");
+            md = updatedRelease;
             writeManifest(workspaceRoot, md);
             return { toolResult: `File ${file_path} claim released with status ${status}`, content: [{ type: "text", text: `File ${file_path} claim released with status ${status}` }] };
         }
@@ -407,7 +415,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 "Reported By": reporter
             });
 
-            md = replaceTableInSection(md, "Issues", serializeTableToString(res.headers, res.rows))!;
+            const updatedIssues = replaceTableInSection(md, "Issues", serializeTableToString(res.headers, res.rows));
+            if (!updatedIssues) throw new Error("Failed to replace Issues table — section may be malformed");
+            md = updatedIssues;
             writeManifest(workspaceRoot, md);
             return { toolResult: `Issue reported: ${description}`, content: [{ type: "text", text: `Issue reported: ${description}` }] };
         }
@@ -415,8 +425,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (name === "get_swarm_status") {
             const md = readManifest(workspaceRoot);
             const agents = getTableFromSection(md, "Agents")?.rows || [];
-            const gates = getTableFromSection(md, "Phase Gates")?.rows || [];
             const issues = getTableFromSection(md, "Issues")?.rows || [];
+
+            // Phase Gates uses checkbox list, not a markdown table — parse manually
+            const gatesMatch = md.match(/## Phase Gates\s*\n+([\s\S]*?)(?:\n##\s|$)/);
+            const gates: { phase: string; complete: boolean }[] = [];
+            if (gatesMatch) {
+                const gateLines = gatesMatch[1].split('\n');
+                for (const line of gateLines) {
+                    const m = line.match(/^\s*-\s*\[(x| )\]\s*(.+)/);
+                    if (m) {
+                        gates.push({ phase: m[2].trim(), complete: m[1] === 'x' });
+                    }
+                }
+            }
 
             return { content: [{ type: "text", text: JSON.stringify({ agents, gates, issues }, null, 2) }] };
         }

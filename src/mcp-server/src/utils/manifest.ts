@@ -18,11 +18,19 @@ function cleanCell(cell: string): string {
 }
 
 /**
+ * Escape regex metacharacters in a string for safe use in RegExp.
+ */
+function escapeRegex(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
  * Extracts a markdown table from a specific section denoted by an h2 heading.
  * Returns null if the section or table is not found.
  */
 export function getTableFromSection(markdown: string, sectionHeading: string): ParseResult | null {
-    const sectionRegex = new RegExp(`##\\s+${sectionHeading}\\s*\\n+([\\s\\S]*?)(?:\\n##\\s|$)`);
+    const escaped = escapeRegex(sectionHeading);
+    const sectionRegex = new RegExp(`##\\s+${escaped}\\s*\\n+([\\s\\S]*?)(?:\\n##\\s|$)`);
     const sectionMatch = sectionRegex.exec(markdown);
 
     if (!sectionMatch) {
@@ -103,7 +111,8 @@ export function serializeTableToString(headers: string[], rows: TableRow[]): str
  * Returns the modified complete markdown string.
  */
 export function replaceTableInSection(markdown: string, sectionHeading: string, newTableText: string): string | null {
-    const sectionRegex = new RegExp(`(##\\s+${sectionHeading}\\s*\\n+[\\s\\S]*?)(?:\\n##\\s|$)`);
+    const escaped = escapeRegex(sectionHeading);
+    const sectionRegex = new RegExp(`(##\\s+${escaped}\\s*\\n+[\\s\\S]*?)(?:\\n##\\s|$)`);
     const sectionMatch = sectionRegex.exec(markdown);
 
     if (!sectionMatch) {

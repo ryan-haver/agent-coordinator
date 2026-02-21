@@ -36,10 +36,10 @@ Auto-merge: false
 | Task Board URL | |
 
 ## Agents
+<!-- Agents will be listed here by the /swarm workflow -->
 
 | ID | Role | Model | Scope | Status | Phase |
 |----|------|-------|-------|--------|-------|
-<!-- Agents will be listed here by the /swarm workflow -->
 
 ## File Claims
 <!-- Agents register files here BEFORE editing. Check this table before touching any file. -->

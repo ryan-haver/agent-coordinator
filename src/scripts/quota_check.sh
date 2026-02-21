@@ -61,7 +61,7 @@ for PORT in $PORTS; do
     echo "  Trying port $PORT..."
     URL="https://127.0.0.1:$PORT/exa.language_server_pb.LanguageServerService/GetUserStatus"
 
-    RESPONSE=$(curl -sk -X POST "$URL" \
+    RESPONSE=$(curl -skf -X POST "$URL" \
         -H "X-Codeium-Csrf-Token: $CSRF_TOKEN" \
         -H "Content-Type: application/json" \
         -H "Connect-Protocol-Version: 1" \

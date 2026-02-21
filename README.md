@@ -125,6 +125,8 @@ Nine pre-defined roles with model recommendations:
 | `/resume` | Read the active manifest and continue where the last model left off |
 | `/swarm` | Decompose a task into a supervised multi-agent swarm |
 | `/swarm-auto` | Rapid swarm — all agent prompts generated upfront |
+| `/consult` | Cross-model consultation without full handoff |
+| `/status` | Swarm progress dashboard |
 | `/health` | Audit system status, model config freshness |
 
 ---
@@ -222,7 +224,22 @@ agent-coordinator/
     │   ├── resume.md                      ← /resume workflow
     │   ├── health.md                      ← /health workflow
     │   ├── swarm.md                       ← /swarm workflow (supervised)
-    │   └── swarm-auto.md                  ← /swarm-auto workflow (rapid)
+    │   ├── swarm-auto.md                  ← /swarm-auto workflow (rapid)
+    │   ├── consult.md                     ← /consult workflow
+    │   └── status.md                      ← /status workflow
+    │
+    ├── scripts/
+    │   ├── auto_mode_toggle.ps1            ← Toggle autonomous settings (Windows)
+    │   ├── auto_mode_toggle.sh             ← Toggle autonomous settings (macOS/Linux)
+    │   ├── quota_check.ps1                 ← Direct Quota API check (Windows)
+    │   └── quota_check.sh                  ← Direct Quota API check (macOS/Linux)
+    │
+    ├── mcp-server/                         ← MCP Coordination Server (TypeScript)
+    │   ├── package.json
+    │   ├── tsconfig.json
+    │   └── src/
+    │       ├── index.ts                    ← Main entry point (10 tools + 2 resources)
+    │       └── utils/manifest.ts           ← Markdown table parser/serializer
     │
     └── templates/
         ├── handoff_manifest.md            ← Handoff manifest template
@@ -249,9 +266,10 @@ See [ROADMAP.md](docs/ROADMAP.md) for the full plan:
 | Phase | Name | Status |
 |-------|------|--------|
 | **1A** | Core Merge (handoff + swarm) | ✅ Complete |
-| **1B** | Enhanced Operations (supervision levels, presets) | Planned |
-| **2A** | NotebookLM Integration (research & knowledge) | Planned |
-| **2B** | Fusebase Integration (artifact storage) | Planned |
-| **3** | Cockpit Quota Awareness | Planned |
-| **4** | Direct Quota API | Future |
+| **1B** | MCP Coordination Server | ✅ Complete |
+| **1C** | Enhanced Operations (supervision, presets) | ✅ Complete |
+| **2A** | NotebookLM Integration (research & knowledge) | ✅ Complete |
+| **2B** | Fusebase Integration (artifact storage) | ✅ Complete |
+| **3** | Cockpit Quota Awareness | ✅ Complete |
+| **4** | Direct Quota API | ✅ Complete |
 | **5** | Advanced Capabilities | Future |

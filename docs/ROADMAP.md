@@ -45,12 +45,12 @@ Sourced from [Antigravity Cockpit](https://github.com/jlcodes99/vscode-antigravi
 | Phase | Name | Status | Effort |
 |-------|------|--------|--------|
 | **1A** | Core Merge | ✅ Complete | Foundation — minimum viable system |
-| **1B** | MCP Coordination Server | **Next** | Programmatic manifest management via MCP tools |
-| **1C** | Enhanced Operations | After 1B | Supervision, autonomy, presets |
-| **2A** | NotebookLM Integration | After 1C | Research & persistent knowledge |
-| **2B** | Fusebase Integration | After 2A | Artifact storage, project docs, task tracking |
-| **3** | Cockpit Quota Awareness | After 2B | Passive quota monitoring |
-| **4** | Direct Quota API | Future | Programmatic quota checking |
+| **1B** | MCP Coordination Server | ✅ Complete | Programmatic manifest management via MCP tools |
+| **1C** | Enhanced Operations | ✅ Complete | Supervision, autonomy, presets |
+| **2A** | NotebookLM Integration | ✅ Complete | Research & persistent knowledge |
+| **2B** | Fusebase Integration | ✅ Complete | Artifact storage, project docs, task tracking |
+| **3** | Cockpit Quota Awareness | ✅ Complete | Passive quota monitoring |
+| **4** | Direct Quota API | ✅ Complete | Programmatic quota checking |
 | **5** | Advanced Capabilities | Future | Qdrant, marketplace, dashboards |
 
 ---

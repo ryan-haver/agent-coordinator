@@ -54,11 +54,11 @@ else
     # 2. Inject autonomous overrides using node for reliable JSON parsing
     node -e "
         const fs = require('fs');
-        const path = '$SETTINGS_PATH';
+        const settingsPath = process.argv[1];
         let config = {};
-        if (fs.existsSync(path)) {
+        if (fs.existsSync(settingsPath)) {
             try {
-                const content = fs.readFileSync(path, 'utf8');
+                const content = fs.readFileSync(settingsPath, 'utf8');
                 if (content.trim()) config = JSON.parse(content);
             } catch (e) {
                 console.error('Failed to parse settings.json', e);
@@ -70,7 +70,7 @@ else
         config['cascade.allowInBackground'] = true;
         config['cascade.autoApproveEdits'] = true;
         
-        fs.writeFileSync(path, JSON.stringify(config, null, 2));
-    "
+        fs.writeFileSync(settingsPath, JSON.stringify(config, null, 2));
+    " -- "$SETTINGS_PATH"
     echo "✅ Autonomous settings injected into settings.json"
 fi

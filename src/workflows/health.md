@@ -55,14 +55,14 @@ Verify all workflows are registered:
 **Windows (PowerShell):**
 ```powershell
 $wfDir = "$env:USERPROFILE\.gemini\antigravity\.agent\workflows"
-foreach ($wf in @("pivot.md", "resume.md", "health.md", "swarm.md", "swarm-auto.md")) { echo "$wf`: $(Test-Path "$wfDir\$wf")" }
+foreach ($wf in @("pivot.md", "resume.md", "health.md", "swarm.md", "swarm-auto.md", "consult.md", "status.md")) { echo "$wf`: $(Test-Path "$wfDir\$wf")" }
 ```
 **macOS/Linux (Bash):**
 ```bash
 WF_DIR="$HOME/.gemini/antigravity/.agent/workflows"
-for wf in pivot.md resume.md health.md swarm.md swarm-auto.md; do echo "$wf: $([ -f "$WF_DIR/$wf" ] && echo True || echo False)"; done
+for wf in pivot.md resume.md health.md swarm.md swarm-auto.md consult.md status.md; do echo "$wf: $([ -f "$WF_DIR/$wf" ] && echo True || echo False)"; done
 ```
-- ✅ **GREEN**: All five workflows present
+- ✅ **GREEN**: All seven workflows present
 - 🟡 **YELLOW**: Some workflows missing
 - 🔴 **RED**: All missing
 

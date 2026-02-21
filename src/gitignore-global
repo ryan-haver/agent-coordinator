@@ -14,10 +14,12 @@ consult_request.md
 consult_response.md
 
 # Swarm working documents
-# Note: bare patterns are required in global gitignore (leading / anchors to HOME, not repo root)
-# Contributors: use `git add -f` for source templates like src/templates/spec.md
-spec.md
-plan.md
+# Note: spec.md and plan.md are NOT excluded globally to avoid suppressing
+# user files. Projects using /swarm should add them to a project-level .gitignore
+# or use `git add -f` for source templates.
+
+# Runtime artifacts (may contain PII)
+quota_snapshot.json
 
 # Antigravity configs
 .antigravity-configs/

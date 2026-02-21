@@ -29,13 +29,13 @@ $MISSION
    - Out of scope
    - Use Fusebase `create_page` to save this Spec into the project folder. Tag it with `#swarm`, `#active`, and `#spec`.
 4. **Select agents** — determine which roles and models are needed
-4. **Populate the manifest** — fill in `## Agents` table with assignments, scopes, and phases
-5. **Present for approval** — show the spec and agent plan to the user
-6. **Monitor progress**
+5. **Populate the manifest** — fill in `## Agents` table with assignments, scopes, and phases
+6. **Present for approval** — show the spec and agent plan to the user
+7. **Monitor progress**
    - At each phase gate, check spec criteria and update manifest
    - Track `## Notebook` source count. If close to 300 limit, instruct agents to prune.
-7. **Finalize** — Once QA passes, prepare a merge request/PR from `swarm/<task-slug>` into `main` (if applicable)
-8. **Update the manifest** when done:
+8. **Finalize** — Once QA passes, prepare a merge request/PR from `swarm/<task-slug>` into `main` (if applicable)
+9. **Update the manifest** when done:
    - Set your status to `✅ Complete` in `## Agents`
    - Add context for subsequent agents in `## Handoff Notes`
    - Generate a final project completion report (`nlm report create <alias> --format "Briefing Doc" --confirm`)
