@@ -545,6 +545,60 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                     },
                     required: ["phase_number", "complete"]
                 }
+            },
+            {
+                name: "grant_scope_expansion",
+                description: "Approve a pending scope expansion request, allowing the agent to claim the requested file",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        agent_id: { type: "string", description: "Agent whose request to approve" },
+                        file_path: { type: "string", description: "File path to grant access to" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    },
+                    required: ["agent_id", "file_path"]
+                }
+            },
+            {
+                name: "deny_scope_expansion",
+                description: "Deny a pending scope expansion request",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        agent_id: { type: "string", description: "Agent whose request to deny" },
+                        file_path: { type: "string", description: "File path to deny access to" },
+                        reason: { type: "string", description: "Why the request was denied" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    },
+                    required: ["agent_id", "file_path"]
+                }
+            },
+            {
+                name: "remove_agent_from_manifest",
+                description: "Remove an agent row from the Agents table (e.g. wrongly added agent)",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        agent_id: { type: "string" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    },
+                    required: ["agent_id"]
+                }
+            },
+            {
+                name: "update_agent_in_manifest",
+                description: "Update an existing agent's Model, Scope, or Role in the manifest",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        agent_id: { type: "string" },
+                        role: { type: "string", description: "Optional: new role" },
+                        model: { type: "string", description: "Optional: new model" },
+                        scope: { type: "string", description: "Optional: new scope" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    },
+                    required: ["agent_id"]
+                }
             }
         ]
     };
@@ -672,6 +726,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const file_path = (args as any)?.file_path;
             if (!agent_id || !file_path) throw new Error("Missing required arguments: agent_id, file_path");
             const wsRoot = resolveWorkspaceRoot(args as any);
+
+            // Gap 26: Enforce scope checking
+            const md0 = readManifest(wsRoot);
+            const agentsTable0 = getTableFromSection(md0, "Agents");
+            if (agentsTable0) {
+                const agentRow = agentsTable0.rows.find(r => r["ID"] === agent_id);
+                if (agentRow && agentRow["Scope"]) {
+                    const scope = agentRow["Scope"].trim();
+                    // Check if file_path starts with (or matches) the scope
+                    const normalizedFile = file_path.replace(/\\/g, '/');
+                    const normalizedScope = scope.replace(/\\/g, '/');
+                    const scopeParts = normalizedScope.split(',').map((s: string) => s.trim());
+                    const inScope = scopeParts.some((s: string) => normalizedFile.startsWith(s) || normalizedFile.includes(s) || s === '*' || s === 'all');
+                    if (!inScope) {
+                        throw new Error(`File ${file_path} is outside agent ${agent_id}'s scope (${scope}). Use request_scope_expansion to request access.`);
+                    }
+                }
+            }
 
             // Atomic claim: use lock file to prevent TOCTOU race
             const lockFileName = `.claim-lock-${file_path.replace(/[\/\\:]/g, '_')}`;
@@ -936,7 +1008,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 }
             }
 
-            return { toolResult: JSON.stringify({ agents, gates, issues, handoff_notes: handoffNotes }), content: [{ type: "text", text: JSON.stringify({ agents, gates, issues, handoff_notes: handoffNotes }, null, 2) }] };
+            // Gap 22: Collect broadcast events
+            let events: any[] = [];
+            try { events = getEvents(wsRoot, sessionId); } catch { /* non-fatal */ }
+
+            // Gap 22: Collect pending scope expansion requests
+            const scopeRequests = agentFiles.flatMap(ap =>
+                ap.issues.filter(i => i.severity?.includes('SCOPE_REQUEST')).map(i => ({
+                    agent_id: ap.agent_id,
+                    file_path: i.area,
+                    reason: i.description?.replace('Scope expansion requested: ', ''),
+                    status: 'pending'
+                }))
+            );
+
+            return { toolResult: JSON.stringify({ agents, gates, issues, handoff_notes: handoffNotes, events, scope_requests: scopeRequests }), content: [{ type: "text", text: JSON.stringify({ agents, gates, issues, handoff_notes: handoffNotes, events: events.length, scope_requests: scopeRequests }, null, 2) }] };
         }
 
         if (name === "poll_agent_completion") {
@@ -961,7 +1047,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 agentsNotStarted.length === 0 &&
                 phaseAgents.every(a => terminal.some(t => a.status?.includes(t)));
 
-            const result = {
+            const result: any = {
                 all_complete: allDone,
                 total_agents: phaseAgents.length,
                 expected_agents: expectedInPhase.length,
@@ -970,9 +1056,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     id: a.agent_id,
                     role: a.role,
                     status: a.status,
+                    detail: a.detail || '',
                     last_updated: a.last_updated
                 }))
             };
+
+            // Gap 21: Stale agent detection
+            const staleThreshold = (args as any)?.stale_threshold_minutes;
+            if (staleThreshold && typeof staleThreshold === 'number') {
+                const now = Date.now();
+                result.stale_agents = phaseAgents
+                    .filter(a => {
+                        if (terminal.some(t => a.status?.includes(t))) return false; // already done
+                        const updated = new Date(a.last_updated).getTime();
+                        return (now - updated) > staleThreshold * 60 * 1000;
+                    })
+                    .map(a => ({
+                        id: a.agent_id,
+                        last_updated: a.last_updated,
+                        minutes_stale: Math.round((now - new Date(a.last_updated).getTime()) / 60000)
+                    }));
+            }
+
             return { toolResult: JSON.stringify(result), content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
         }
 
@@ -1438,7 +1543,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const completedAgents = allProgress.filter(a => a.status?.includes("Complete") || a.status?.includes("Done")).length;
             const failedAgents = allProgress.filter(a => a.status?.includes("Failed")).length;
 
-            return { toolResult: "Swarm completed", content: [{ type: "text", text: `Swarm completed. ${completedAgents}/${totalAgents} agents succeeded, ${failedAgents} failed. Archived to ${archiveName}. Cleaned ${cleaned} agent files.` }] };
+            // Gap 23: Generate swarm-report.md
+            try {
+                const missionMatch = md.match(/## Mission\s*\n+([\s\S]*?)(?:\n## |$)/);
+                const mission = missionMatch ? missionMatch[1].trim().slice(0, 200) : 'Unknown';
+                const report = [
+                    `# Swarm Report — ${sessionId}`,
+                    '',
+                    `**Mission:** ${mission}`,
+                    `**Completed:** ${new Date().toISOString()}`,
+                    `**Result:** ${completedAgents}/${totalAgents} agents succeeded, ${failedAgents} failed`,
+                    '',
+                    '## Agent Summary',
+                    '',
+                    '| Agent | Role | Status |',
+                    '|-------|------|--------|',
+                    ...allProgress.map(a => `| ${a.agent_id} | ${a.role} | ${a.status} |`),
+                    '',
+                    '## Issues',
+                    '',
+                    ...(allProgress.flatMap(a => a.issues).length > 0
+                        ? ['| Severity | Area | Description | Reporter |',
+                            '|----------|------|-------------|----------|',
+                            ...allProgress.flatMap(a => a.issues.map(i => `| ${i.severity} | ${i.area} | ${i.description} | ${a.agent_id} |`))]
+                        : ['(No issues reported)']),
+                    '',
+                    '## File Claims',
+                    '',
+                    '| File | Agent | Status |',
+                    '|------|-------|--------|',
+                    ...allProgress.flatMap(a => a.file_claims.map(c => `| ${c.file} | ${a.agent_id} | ${c.status} |`)),
+                    '',
+                    `---`,
+                    `_Archived manifest: ${archiveName}_`
+                ].join('\n');
+                fs.writeFileSync(path.join(wsRoot, 'swarm-report.md'), report, 'utf8');
+            } catch { /* report generation is non-fatal */ }
+
+            return { toolResult: "Swarm completed", content: [{ type: "text", text: `Swarm completed. ${completedAgents}/${totalAgents} agents succeeded, ${failedAgents} failed. Archived to ${archiveName}. Report: swarm-report.md. Cleaned ${cleaned} agent files.` }] };
         }
 
         // === GAP 4: get_my_assignment ===
@@ -1484,6 +1626,110 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             writeSwarmStatus(wsRoot, newMd, `Phase gate ${phase_number} ${complete ? 'checked' : 'unchecked'}`);
 
             return { toolResult: `Phase gate ${phase_number} updated`, content: [{ type: "text", text: `Phase gate ${phase_number} ${complete ? '✅ checked' : '⬜ unchecked'}` }] };
+        }
+        // === GAP 20: grant_scope_expansion ===
+        if (name === "grant_scope_expansion") {
+            const { agent_id, file_path } = args as any;
+            if (!agent_id || !file_path) throw new Error("Missing required arguments");
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            let md = readManifest(wsRoot);
+            const sessionId = extractSessionId(md);
+
+            // 1. Expand agent's scope in manifest
+            const agentsTable = getTableFromSection(md, "Agents");
+            if (agentsTable) {
+                const row = agentsTable.rows.find(r => r["ID"] === agent_id);
+                if (row) {
+                    const currentScope = row["Scope"] || '';
+                    row["Scope"] = currentScope ? `${currentScope}, ${file_path}` : file_path;
+                    const updated = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+                    if (updated) writeManifest(wsRoot, updated);
+                }
+            }
+
+            // 2. Resolve the scope request in agent progress (mark as approved)
+            let progress = readAgentProgress(wsRoot, agent_id);
+            if (progress) {
+                for (const issue of progress.issues) {
+                    if (issue.severity?.includes('SCOPE_REQUEST') && issue.area === file_path) {
+                        issue.severity = "✅ SCOPE_GRANTED";
+                    }
+                }
+                const ts = new Date().toISOString().slice(0, 19);
+                progress.handoff_notes = (progress.handoff_notes || '') + `\n[${ts}] [SCOPE_GRANTED] ${agent_id} approved for ${file_path}`;
+                writeAgentProgress(wsRoot, progress);
+            }
+
+            return { toolResult: `Scope expansion granted`, content: [{ type: "text", text: `${agent_id} granted access to ${file_path}. Scope updated in manifest.` }] };
+        }
+
+        // === GAP 20: deny_scope_expansion ===
+        if (name === "deny_scope_expansion") {
+            const { agent_id, file_path, reason } = args as any;
+            if (!agent_id || !file_path) throw new Error("Missing required arguments");
+            const wsRoot = resolveWorkspaceRoot(args as any);
+
+            let progress = readAgentProgress(wsRoot, agent_id);
+            if (progress) {
+                for (const issue of progress.issues) {
+                    if (issue.severity?.includes('SCOPE_REQUEST') && issue.area === file_path) {
+                        issue.severity = "❌ SCOPE_DENIED";
+                        issue.description = `${issue.description} [DENIED: ${reason || 'No reason given'}]`;
+                    }
+                }
+                const ts = new Date().toISOString().slice(0, 19);
+                progress.handoff_notes = (progress.handoff_notes || '') + `\n[${ts}] [SCOPE_DENIED] ${agent_id} denied for ${file_path}: ${reason || 'No reason'}`;
+                writeAgentProgress(wsRoot, progress);
+            }
+
+            return { toolResult: `Scope expansion denied`, content: [{ type: "text", text: `${agent_id} denied access to ${file_path}. Reason: ${reason || 'No reason given'}` }] };
+        }
+
+        // === GAP 24: remove_agent_from_manifest ===
+        if (name === "remove_agent_from_manifest") {
+            const { agent_id } = args as any;
+            if (!agent_id) throw new Error("Missing required argument: agent_id");
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            let md = readManifest(wsRoot);
+
+            const agentsTable = getTableFromSection(md, "Agents");
+            if (!agentsTable) throw new Error("No Agents table in manifest");
+            const idx = agentsTable.rows.findIndex(r => r["ID"] === agent_id);
+            if (idx === -1) throw new Error(`Agent ${agent_id} not found in manifest`);
+
+            agentsTable.rows.splice(idx, 1);
+            const updated = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+            if (updated) {
+                writeManifest(wsRoot, updated);
+                try { updateSwarmRegistry(wsRoot, { agents_total: agentsTable.rows.length }); } catch { /* non-fatal */ }
+            }
+
+            return { toolResult: `Agent ${agent_id} removed`, content: [{ type: "text", text: `Removed agent ${agent_id} from manifest` }] };
+        }
+
+        // === GAP 25: update_agent_in_manifest ===
+        if (name === "update_agent_in_manifest") {
+            const { agent_id, role, model, scope } = args as any;
+            if (!agent_id) throw new Error("Missing required argument: agent_id");
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            let md = readManifest(wsRoot);
+
+            const agentsTable = getTableFromSection(md, "Agents");
+            if (!agentsTable) throw new Error("No Agents table in manifest");
+            const row = agentsTable.rows.find(r => r["ID"] === agent_id);
+            if (!row) throw new Error(`Agent ${agent_id} not found in manifest`);
+
+            const changes: string[] = [];
+            if (role) { row["Role"] = role; changes.push(`role=${role}`); }
+            if (model) { row["Model"] = model; changes.push(`model=${model}`); }
+            if (scope) { row["Scope"] = scope; changes.push(`scope=${scope}`); }
+
+            if (changes.length === 0) throw new Error("No fields to update. Provide at least one of: role, model, scope");
+
+            const updated = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+            if (updated) writeManifest(wsRoot, updated);
+
+            return { toolResult: `Agent ${agent_id} updated`, content: [{ type: "text", text: `Updated agent ${agent_id}: ${changes.join(", ")}` }] };
         }
 
         throw new Error(`Unknown tool: ${name}`);
