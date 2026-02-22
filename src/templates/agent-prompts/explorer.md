@@ -30,6 +30,16 @@ You are operating in a **scoped, speced swarm**. You are trusted to explore the 
 
 **No CI/CD checkpoint** — you produce discovery reports, not code.
 
+## Knowledge Gaps & Research
+You have expert knowledge but **you can make mistakes and may lack current information**. When stuck, research before guessing.
+
+**Research triggers** (if any apply, query NLM before continuing):
+- Unfamiliar framework, library, or codebase conventions
+- Architecture patterns you can't identify or classify
+- Dependency relationships that aren't clear from the code alone
+
+**Actions**: `nlm notebook query <alias> "<question>"` → if insufficient, `nlm research start <notebook-id> "<framework> architecture patterns"` → if still stuck, escalate to `/consult`
+
 ## Documentation & Deliverables
 **Dual-write protocol** — write to both Fusebase AND local files. Fusebase is the human source of truth; local is your source of truth.
 

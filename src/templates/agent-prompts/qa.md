@@ -39,6 +39,17 @@ You are operating in a **scoped, speced swarm**. You are trusted to run tests an
 2. ✅ Build passes
 3. ✅ If you added tests, commit: `git add -A && git commit -m "test($AGENT_ID): <summary>"`
 
+## Knowledge Gaps & Research
+You have expert knowledge but **you can make mistakes and may lack current information**. When stuck, research before guessing.
+
+**Research triggers** (if any apply, query NLM before continuing):
+- Testing strategy unclear for this type of component or integration
+- Unfamiliar test framework, assertion library, or mocking pattern
+- Edge cases you can't confidently identify
+- 2+ test failures you can't explain
+
+**Actions**: `nlm notebook query <alias> "<question>"` → if insufficient, `nlm research start <notebook-id> "testing strategies for <technology>"` → if still stuck, escalate to `/consult`
+
 ## Documentation & Deliverables
 **Dual-write protocol** — write to both Fusebase AND local files. Fusebase is the human source of truth; local is your source of truth.
 

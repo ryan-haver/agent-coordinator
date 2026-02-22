@@ -43,6 +43,17 @@ You are operating in a **scoped, speced swarm**. You are trusted to run build, l
 2. ✅ Lint passes
 3. ✅ Commit: `git add -A && git commit -m "ci($AGENT_ID): <summary>"`
 
+## Knowledge Gaps & Research
+You have expert knowledge but **you can make mistakes and may lack current information**. When stuck, research before guessing.
+
+**Research triggers** (if any apply, query NLM before continuing):
+- Unfamiliar CI/CD tool, build system, or deployment platform
+- Build failures with errors you can't diagnose
+- Infrastructure or configuration patterns you're unsure about
+- 2+ failed build/deploy attempts
+
+**Actions**: `nlm notebook query <alias> "<question>"` → if insufficient, `nlm research start <notebook-id> "<tool> configuration best practices"` → if still stuck, escalate to `/consult`
+
 ## Documentation & Deliverables
 **Dual-write protocol** — write to both Fusebase AND local files. Fusebase is the human source of truth; local is your source of truth.
 

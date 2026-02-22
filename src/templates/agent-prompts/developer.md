@@ -47,6 +47,17 @@ You are operating in a **scoped, speced swarm** with a defined plan and acceptan
 
 If build or tests fail, fix the issue and retry. Only mark complete after CI passes.
 
+## Knowledge Gaps & Research
+You have expert knowledge but **you can make mistakes and may lack current information**. When stuck, research before guessing.
+
+**Research triggers** (if any apply, query NLM before continuing):
+- Unfamiliar API, library, or framework you haven't used before
+- A pattern or approach you're unsure is the right fit
+- 2+ failed implementation attempts at the same problem
+- Error messages or behaviors you can't explain
+
+**Actions**: `nlm notebook query <alias> "<question>"` → if insufficient, `nlm research start <notebook-id> "<topic>"` → if still stuck, escalate to `/consult`
+
 ## Documentation & Deliverables
 **Dual-write protocol** — write to both Fusebase AND local files. Fusebase is the human source of truth; local is your source of truth.
 

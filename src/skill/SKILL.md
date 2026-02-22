@@ -41,9 +41,13 @@ When stuck, agents follow this progression (cheapest first):
 | Situation | Action | Cost |
 |-----------|--------|------|
 | Stuck for 1-2 attempts | Keep trying | Free |
-| Stuck for 3+ attempts | **Consult** another model | Low — focused question only |
+| Unfamiliar territory OR 2+ failures | **Research via NLM** — query project notebook or initiate deep research | Low — uses existing tooling |
+| Research didn't help, stuck 3+ attempts | **Consult** another model | Low — focused question only |
 | Context filling up | **Handoff** to fresh session | Medium — full manifest |
 | Multi-track remaining work | **Swarm** to parallel agents | High — full decomposition |
+
+> [!IMPORTANT]
+> **Always research before consulting.** NLM research is cheaper than a model consultation and often sufficient. Only escalate to `/consult` if research didn't resolve the blocker.
 
 ---
 
@@ -314,6 +318,52 @@ If a Fusebase write fails, **never block work** — follow this protocol:
 | **Agent action** | `nlm notebook query <alias> "<question>"` | `fusebase create_page`, `fusebase update_page_content` |
 | **Persistence** | Notebook per project (queryable forever) | Workspace with folders, pages, tasks |
 | **Human interaction** | Read-only summaries | Comments, @mentions, inline feedback |
+
+#### 10. Epistemic Humility — Research Before Guessing
+
+You may have expert knowledge, but **you can make mistakes and you may lack current information**. When you encounter unfamiliar territory or your approach isn't working, **research first** — don't guess, don't hallucinate, don't assume.
+
+##### When to Research
+
+- You encounter an **unfamiliar API, library, framework, or pattern**
+- You've **failed 2+ times** at the same approach
+- You're **unsure about a technology trade-off** or best practice
+- You recognize an **error or stack trace you can't diagnose**
+- You're making a **decision that could affect the project** and you're not confident
+
+##### How to Research
+
+Three actions, in order of preference:
+
+1. **Query the project notebook** (cheapest — already populated):
+   ```
+   nlm notebook query <alias> "How does the payment API handle currency conversion?"
+   ```
+
+2. **Initiate deep research in the project notebook** (cheap — adds web sources):
+   ```
+   nlm research start <notebook-id> "best practices for Redis caching in Node.js"
+   ```
+
+3. **Create a new research notebook** (most thorough — for deep dives):
+   ```
+   nlm notebook create "Research: GraphQL vs REST for Agent API"
+   nlm research start <new-id> "GraphQL vs REST trade-offs 2026"
+   nlm notebook query <new-id> "What are the performance implications?"
+   ```
+
+##### Protocol
+
+```
+Agent encounters unknown → check project notebook first
+  → notebook has answer? → use it, continue
+  → notebook doesn't have answer? → initiate deep research
+  → deep research resolves it? → use it, continue
+  → still stuck after research? → escalate to /consult
+```
+
+> [!NOTE]
+> The `## Knowledge Gaps & Research` section in each agent prompt defines role-specific research triggers. Every agent — not just the Researcher — can and should use NLM when they hit the limits of their knowledge.
 
 ### Phase Sequencing
 

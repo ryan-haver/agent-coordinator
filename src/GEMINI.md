@@ -6,9 +6,10 @@ You have a unified Agent Coordination System installed as a skill at `~/.gemini/
 
 **Escalation ladder** (cheapest first):
 1. **Keep trying** — stuck for 1-2 attempts
-2. **Consult** — stuck for 3+ attempts → write `consult_request.md`, ask a different model
-3. **Handoff** — context filling up → generate manifest via `/pivot`
-4. **Swarm** — multi-track remaining work → decompose via `/swarm`
+2. **Research** — unfamiliar territory or 2+ failures → query NLM notebook or `nlm research start`
+3. **Consult** — research didn't help, stuck 3+ attempts → write `consult_request.md`, ask a different model
+4. **Handoff** — context filling up → generate manifest via `/pivot`
+5. **Swarm** — multi-track remaining work → decompose via `/swarm`
 
 **Your role in the model chain:**
 - Claude (Opus/Sonnet) → **The Architect**: deep reasoning, precision debugging

@@ -42,6 +42,17 @@ You are operating in a **scoped, speced swarm**. You are trusted to diagnose and
 2. ✅ Run tests — original failure resolved, no regressions
 3. ✅ Commit your fix: `git add -A && git commit -m "fix($AGENT_ID): <root cause summary>"`
 
+## Knowledge Gaps & Research
+You have expert knowledge but **you can make mistakes and may lack current information**. When stuck, research before guessing.
+
+**Research triggers** (if any apply, query NLM before continuing):
+- Error messages or stack traces you can't diagnose confidently
+- Unfamiliar runtime behavior or platform-specific quirks
+- 2+ failed root cause hypotheses
+- Debugging techniques you're unsure about for this specific technology
+
+**Actions**: `nlm notebook query <alias> "<error message or symptom>"` → if insufficient, `nlm research start <notebook-id> "<technology> debugging <symptom>"` → if still stuck, escalate to `/consult`
+
 ## Documentation & Deliverables
 **Dual-write protocol** — write to both Fusebase AND local files. Fusebase is the human source of truth; local is your source of truth.
 
