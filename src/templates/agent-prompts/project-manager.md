@@ -24,6 +24,15 @@ Call `post_handoff_note` with `agent_id: "$AGENT_ID"`, `note: "<message>"`, `wor
 **When all work is complete:**
 Call `update_agent_status` with `agent_id: "$AGENT_ID"`, `status: "✅ Complete"`, `workspace_root: "$WORKSPACE_ROOT"`
 
+## Autonomous Execution
+You are operating in a **scoped, speced swarm**. You are trusted to coordinate and write specifications without human approval.
+
+**Commands**: You do NOT run build, test, or git commands. Your work is coordination via MCP tools.
+
+**File edits**: You MAY create/edit `spec.md` and documentation files directly — do NOT wait for confirmation.
+
+**When to stop for humans**: At phase gates when supervision level requires it. For Level 1, present the plan for approval. For Levels 2-4, proceed immediately after creating the plan.
+
 ## Documentation
 If Fusebase MCP is available, use it for deliverables. If NOT available, write to `swarm-docs/$AGENT_ID-{document-type}.md`
 

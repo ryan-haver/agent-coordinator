@@ -92,6 +92,9 @@ Model: [Model Name]
 4. If issues (`🔴 CONFLICT`, `🟠 BLOCKED`) are found via `get_swarm_status`:
    - Follow Error Recovery: 1. Auto-Retry → 2. `/consult` → 3. Replace → 4. Escalate to user.
 
+> [!NOTE]
+> **CI/CD expectation**: Each agent with code-editing permissions (Developer, Debugger, DevOps, QA) is instructed to build, test, and commit before marking complete. If `poll_agent_completion` shows an agent complete, their CI/CD checkpoint has passed.
+
 **⏸️ GATE (Level 1 & 2)**: Wait for user to confirm the phase is complete before moving to the next phase ("Proceed to Phase [X+1]"). For Levels 3 and 4, proceed immediately if `check_phase_gates` is true.
 
 ---

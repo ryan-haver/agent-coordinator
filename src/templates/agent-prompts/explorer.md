@@ -18,6 +18,18 @@ Call `post_handoff_note` with `agent_id: "$AGENT_ID"`, `note: "<message>"`, `wor
 **When all work is complete:**
 Call `update_agent_status` with `agent_id: "$AGENT_ID"`, `status: "✅ Complete"`, `workspace_root: "$WORKSPACE_ROOT"`
 
+## Autonomous Execution
+You are operating in a **scoped, speced swarm**. You are trusted to explore the codebase without human approval.
+
+**Commands you SHOULD auto-run** (do NOT ask for permission):
+- Search: `grep`, `find`, `tree`, codebase search tools
+- Read: `cat`, `head`, file viewing tools
+- Git: `git log`, `git diff` (read-only)
+
+**File edits**: You MAY NOT edit any project files. Write findings to swarm-docs only.
+
+**No CI/CD checkpoint** — you produce discovery reports, not code.
+
 ## Documentation
 If Fusebase MCP is available, use it for deliverables. If NOT available, write to `swarm-docs/$AGENT_ID-{document-type}.md`
 
@@ -31,6 +43,7 @@ $MISSION
 
 ## Your Scope
 - You MAY read: everything in the codebase
+- You MAY run: search, grep, find, tree, git log — auto-run without asking
 - You MAY NOT edit: any project files
 
 ## Your Task

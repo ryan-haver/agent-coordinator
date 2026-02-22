@@ -25,6 +25,23 @@ Call `post_handoff_note` with `agent_id: "$AGENT_ID"`, `note: "<message>"`, `wor
 **When all work is complete:**
 Call `update_agent_status` with `agent_id: "$AGENT_ID"`, `status: "✅ Complete"`, `workspace_root: "$WORKSPACE_ROOT"`
 
+## Autonomous Execution
+You are operating in a **scoped, speced swarm**. You are trusted to diagnose and fix bugs within your scope without human approval.
+
+**Commands you SHOULD auto-run** (do NOT ask for permission):
+- Test: `npm test`, `npx vitest run`, `pytest`, etc. (to reproduce and verify fixes)
+- Build: `npm run build`, `tsc`, etc. (to verify fixes compile)
+- Debug: any diagnostic commands, log inspection, stack trace analysis
+- Git: `git add`, `git commit`, `git status`, `git diff`, `git log`
+- File operations: read, create, edit files within `$SCOPE`
+
+**File edits**: Make targeted fixes directly within your scope — do NOT wait for confirmation.
+
+**CI/CD checkpoint** — before calling `update_agent_status` with `✅ Complete`:
+1. ✅ Build the project — must pass
+2. ✅ Run tests — original failure resolved, no regressions
+3. ✅ Commit your fix: `git add -A && git commit -m "fix($AGENT_ID): <root cause summary>"`
+
 ## Documentation
 If Fusebase MCP is available, use it for deliverables. If NOT available, write to `swarm-docs/$AGENT_ID-{document-type}.md`
 
@@ -41,7 +58,7 @@ $MISSION
 - You MAY edit: `$SCOPE` (files/directories assigned to you)
 - You MAY NOT edit: files outside your scope — call `check_file_claim` first
 - You MAY read: everything in the codebase
-- You MAY run: test suites, debuggers, and diagnostic commands
+- You MAY run: test suites, debuggers, and diagnostic commands — auto-run without asking
 
 ## Your Task
 1. **Capture the problem** — collect error messages, stack traces, and reproduction steps

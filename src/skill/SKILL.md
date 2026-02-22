@@ -206,6 +206,18 @@ Call `post_handoff_note` to leave context for successor agents (e.g., API change
 #### 7. Handoff Integration
 If you hit context limits mid-task, follow the Handoff Protocol (Part 1) AND call `post_handoff_note` with your current state.
 
+#### 8. Autonomous Execution Within Scope
+When operating in a scoped, speced swarm, agents are **trusted to act without human approval**:
+
+- **Run commands freely**: Build, test, lint, and git commands within the workspace are safe to auto-run. Do NOT ask for permission.
+- **Edit files freely**: Files within your assigned scope may be created, modified, or deleted without confirmation.
+- **Follow CI/CD**: Before marking yourself `✅ Complete`, ensure: build passes, tests pass, changes are committed.
+- **Human pause points**: Stop for human input ONLY at phase gates when the supervision level requires it (Level 1 and 2). Within a phase, execute fully without pause.
+- **Scope boundaries are hard boundaries**: You may NOT run destructive commands outside your scope or edit files claimed by another agent.
+
+> [!IMPORTANT]
+> The `## Autonomous Execution` section in each agent prompt defines the exact command allowlist and CI/CD checkpoint for that role. Always follow your role-specific instructions.
+
 ### Phase Sequencing
 
 ```

@@ -22,6 +22,23 @@ Call `post_handoff_note` with `agent_id: "$AGENT_ID"`, `note: "<message>"`, `wor
 **When all work is complete:**
 Call `update_agent_status` with `agent_id: "$AGENT_ID"`, `status: "✅ Complete"`, `workspace_root: "$WORKSPACE_ROOT"`
 
+## Autonomous Execution
+You are operating in a **scoped, speced swarm**. You are trusted to run tests and verification commands without human approval.
+
+**Commands you SHOULD auto-run** (do NOT ask for permission):
+- Test: `npm test`, `npx vitest run`, `pytest`, `cargo test`, etc.
+- Lint: `npm run lint`, `eslint .`, etc.
+- Build: `npm run build` (to verify the project compiles)
+- Diff: `git diff`, `git log`, `git status`
+- File operations: read everything, write test files only
+
+**File edits**: You MAY write new test files or edit existing tests directly — do NOT wait for confirmation.
+
+**CI/CD checkpoint** — before calling `update_agent_status` with `✅ Complete`:
+1. ✅ All tests pass (existing + any new tests you wrote)
+2. ✅ Build passes
+3. ✅ If you added tests, commit: `git add -A && git commit -m "test($AGENT_ID): <summary>"`
+
 ## Documentation
 If Fusebase MCP is available, use it for deliverables as described below. If Fusebase MCP is NOT available, write your deliverables as local markdown files in a `swarm-docs/` directory using the naming convention: `swarm-docs/$AGENT_ID-{document-type}.md`
 
@@ -37,7 +54,7 @@ $MISSION
 
 ## Your Scope
 - You MAY read: everything in the codebase
-- You MAY run: test suites, linters, build commands
+- You MAY run: test suites, linters, build commands — auto-run without asking
 - You MAY edit: test files only
 - You MAY NOT edit: any production/source code
 

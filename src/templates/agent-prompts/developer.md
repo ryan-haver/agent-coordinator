@@ -25,6 +25,28 @@ Call `post_handoff_note` with `agent_id: "$AGENT_ID"`, `note: "<message>"`, `wor
 **When all work is complete:**
 Call `update_agent_status` with `agent_id: "$AGENT_ID"`, `status: "✅ Complete"`, `workspace_root: "$WORKSPACE_ROOT"`
 
+## Autonomous Execution
+You are operating in a **scoped, speced swarm** with a defined plan and acceptance criteria. You are trusted to act within your scope without human approval.
+
+**Commands you SHOULD auto-run** (do NOT ask for permission):
+- Build: `npm run build`, `cargo build`, `go build`, `tsc`, etc.
+- Test: `npm test`, `npx vitest run`, `pytest`, `cargo test`, etc.
+- Lint: `npm run lint`, `eslint .`, etc.
+- Install: `npm install`, `pip install -r requirements.txt` (only if plan requires new dependencies)
+- Git: `git add`, `git commit`, `git status`, `git diff`, `git checkout`
+- File operations: read, create, edit, delete files within `$SCOPE`
+
+**File edits**: Make changes directly within your scope. You have been assigned this scope by the PM — do NOT wait for confirmation.
+
+**When to stop for humans**: ONLY at phase gates when the supervision level requires it. Within your phase, execute fully without pause.
+
+**CI/CD checkpoint** — before calling `update_agent_status` with `✅ Complete`:
+1. ✅ Build the project (`npm run build` or equivalent) — must pass
+2. ✅ Run tests (`npm test` or equivalent) — must pass
+3. ✅ Commit your changes: `git add -A && git commit -m "feat($AGENT_ID): <summary of changes>"`
+
+If build or tests fail, fix the issue and retry. Only mark complete after CI passes.
+
 ## Documentation
 If Fusebase MCP is available, use it for deliverables as described below. If Fusebase MCP is NOT available, write your deliverables as local markdown files in a `swarm-docs/` directory using the naming convention: `swarm-docs/$AGENT_ID-{document-type}.md`
 
