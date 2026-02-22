@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { withFileLock } from './file-mutex.js';
 
 export interface TableRow {
     [key: string]: string;
@@ -205,4 +206,28 @@ export function writeManifest(workspaceRoot: string, content: string): void {
     }
 
     fs.writeFileSync(manifestPath, content, 'utf8');
+}
+
+/**
+ * Execute a read-modify-write operation on the manifest while holding
+ * a cross-process file lock. Only one process can modify the manifest at a time.
+ *
+ * @param workspaceRoot Workspace root directory
+ * @param fn Receives current manifest content, returns { content: newContent, result: T }
+ *           If fn returns null for content, the manifest is NOT written back.
+ * @returns The result value from fn
+ */
+export async function withManifestLock<T>(
+    workspaceRoot: string,
+    fn: (md: string) => { content: string | null; result: T }
+): Promise<T> {
+    const lockPath = path.join(workspaceRoot, '.manifest-lock');
+    return withFileLock(lockPath, () => {
+        const md = readManifest(workspaceRoot);
+        const { content, result } = fn(md);
+        if (content !== null) {
+            writeManifest(workspaceRoot, content);
+        }
+        return result;
+    });
 }

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { withFileLock } from './file-mutex.js';
 
 /**
  * Swarm Registry — tracks active swarms across all workspaces.
@@ -49,32 +50,40 @@ function writeRegistry(entries: SwarmRegistryEntry[]): void {
 /**
  * Register a new swarm in the global registry.
  */
-export function registerSwarm(entry: SwarmRegistryEntry): void {
-    const entries = readRegistry();
-    // Remove any existing entry for this workspace (one swarm per workspace)
-    const filtered = entries.filter(e => e.workspace !== entry.workspace);
-    filtered.push(entry);
-    writeRegistry(filtered);
+export async function registerSwarm(entry: SwarmRegistryEntry): Promise<void> {
+    const lockPath = REGISTRY_PATH + '.lock';
+    await withFileLock(lockPath, () => {
+        const entries = readRegistry();
+        const filtered = entries.filter(e => e.workspace !== entry.workspace);
+        filtered.push(entry);
+        writeRegistry(filtered);
+    });
 }
 
 /**
  * Update an existing swarm's registry entry.
  */
-export function updateSwarmRegistry(workspace: string, updates: Partial<SwarmRegistryEntry>): void {
-    const entries = readRegistry();
-    const entry = entries.find(e => e.workspace === workspace);
-    if (entry) {
-        Object.assign(entry, updates, { last_updated: new Date().toISOString() });
-        writeRegistry(entries);
-    }
+export async function updateSwarmRegistry(workspace: string, updates: Partial<SwarmRegistryEntry>): Promise<void> {
+    const lockPath = REGISTRY_PATH + '.lock';
+    await withFileLock(lockPath, () => {
+        const entries = readRegistry();
+        const entry = entries.find(e => e.workspace === workspace);
+        if (entry) {
+            Object.assign(entry, updates, { last_updated: new Date().toISOString() });
+            writeRegistry(entries);
+        }
+    });
 }
 
 /**
  * Remove a swarm from the registry (on completion or cleanup).
  */
-export function deregisterSwarm(workspace: string): void {
-    const entries = readRegistry();
-    writeRegistry(entries.filter(e => e.workspace !== workspace));
+export async function deregisterSwarm(workspace: string): Promise<void> {
+    const lockPath = REGISTRY_PATH + '.lock';
+    await withFileLock(lockPath, () => {
+        const entries = readRegistry();
+        writeRegistry(entries.filter(e => e.workspace !== workspace));
+    });
 }
 
 /**
@@ -103,15 +112,18 @@ function eventsFilePath(workspace: string, sessionId: string): string {
 /**
  * Broadcast an event visible to all agents in the same workspace/session.
  */
-export function broadcastEvent(event: SwarmEvent): void {
+export async function broadcastEvent(event: SwarmEvent): Promise<void> {
     if (!fs.existsSync(EVENTS_DIR)) fs.mkdirSync(EVENTS_DIR, { recursive: true });
     const fp = eventsFilePath(event.workspace, event.session_id);
-    let events: SwarmEvent[] = [];
-    try {
-        if (fs.existsSync(fp)) events = JSON.parse(fs.readFileSync(fp, 'utf8'));
-    } catch { /* start fresh */ }
-    events.push(event);
-    fs.writeFileSync(fp, JSON.stringify(events, null, 2), 'utf8');
+    const lockPath = fp + '.lock';
+    await withFileLock(lockPath, () => {
+        let events: SwarmEvent[] = [];
+        try {
+            if (fs.existsSync(fp)) events = JSON.parse(fs.readFileSync(fp, 'utf8'));
+        } catch { /* start fresh */ }
+        events.push(event);
+        fs.writeFileSync(fp, JSON.stringify(events, null, 2), 'utf8');
+    });
 }
 
 /**

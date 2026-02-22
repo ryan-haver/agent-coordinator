@@ -12,6 +12,8 @@ swarm-agent-*.json
 swarm-manifest.md.bak
 swarm-docs/
 .claim-lock-*
+.manifest-lock
+*.lock
 .swarm-archives/
 swarm-report.md
 

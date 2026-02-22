@@ -11,7 +11,8 @@ import {
     replaceTableInSection,
     serializeTableToString,
     readManifest,
-    writeManifest
+    writeManifest,
+    withManifestLock
 } from "./utils/manifest.js";
 import {
     readAgentProgress,
@@ -908,23 +909,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 : formattedNote;
             writeAgentProgress(wsRoot, progress);
 
-            // Also append to manifest ## Handoff Notes section
+            // Also append to manifest ## Handoff Notes section (locked)
             try {
-                let md = readManifest(wsRoot);
-                // Robust: find the section heading and insert after it (+ any HTML comment)
-                const handoffIdx = md.indexOf('## Handoff Notes');
-                if (handoffIdx !== -1) {
-                    // Find end of heading line
-                    let insertIdx = md.indexOf('\n', handoffIdx);
-                    if (insertIdx === -1) insertIdx = md.length;
-                    else insertIdx++; // after the newline
-                    // Skip optional HTML comment line
-                    const rest = md.slice(insertIdx);
-                    const commentMatch = rest.match(/^<!--[\s\S]*?-->\s*\n/);
-                    if (commentMatch) insertIdx += commentMatch[0].length;
-                    md = md.slice(0, insertIdx) + formattedNote + '\n' + md.slice(insertIdx);
-                    writeManifest(wsRoot, md);
-                }
+                await withManifestLock(wsRoot, (md) => {
+                    const handoffIdx = md.indexOf('## Handoff Notes');
+                    if (handoffIdx !== -1) {
+                        let insertIdx = md.indexOf('\n', handoffIdx);
+                        if (insertIdx === -1) insertIdx = md.length;
+                        else insertIdx++;
+                        const rest = md.slice(insertIdx);
+                        const commentMatch = rest.match(/^<!--[\s\S]*?-->\s*\n/);
+                        if (commentMatch) insertIdx += commentMatch[0].length;
+                        const newMd = md.slice(0, insertIdx) + formattedNote + '\n' + md.slice(insertIdx);
+                        return { content: newMd, result: null };
+                    }
+                    return { content: null, result: null };
+                });
             } catch { /* manifest write failure is non-fatal */ }
 
             return { toolResult: `Note posted by ${agent_id}`, content: [{ type: "text", text: `Note posted: ${formattedNote}` }] };
@@ -1080,115 +1080,104 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         if (name === "rollup_agent_progress") {
             const wsRoot = resolveWorkspaceRoot(args as any);
-            let md = readManifest(wsRoot);
 
-            // Read all per-agent progress files (session-scoped)
-            const sessionId = extractSessionId(md);
+            // Read all per-agent progress files (session-scoped) — outside lock
+            const mdForSession = readManifest(wsRoot);
+            const sessionId = extractSessionId(mdForSession);
             const allProgress = readAllAgentProgress(wsRoot, sessionId);
             if (allProgress.length === 0) {
                 return { toolResult: "No agent progress files found.", content: [{ type: "text", text: "No agent progress files found." }] };
             }
 
-            // 1. Update Agents table with statuses from progress files
-            const agentsTable = getTableFromSection(md, "Agents");
-            if (agentsTable) {
-                for (const ap of allProgress) {
-                    const row = agentsTable.rows.find(r => r["ID"] === ap.agent_id);
-                    if (row) {
-                        row["Status"] = ap.status;
+            // Lock manifest for the merge operation
+            const rollupResult = await withManifestLock(wsRoot, (md) => {
+                // 1. Update Agents table
+                const agentsTable = getTableFromSection(md, "Agents");
+                if (agentsTable) {
+                    for (const ap of allProgress) {
+                        const row = agentsTable.rows.find(r => r["ID"] === ap.agent_id);
+                        if (row) row["Status"] = ap.status;
                     }
+                    const u = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+                    if (u) md = u;
                 }
-                const updatedAgents = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
-                if (updatedAgents) md = updatedAgents;
-            }
 
-            // 2. Merge file claims from all agents into File Claims table
-            const claimsTable = getTableFromSection(md, "File Claims");
-            if (claimsTable) {
-                // Start fresh with claims from agent files
-                const mergedClaims: Array<{ File: string; "Claimed By": string; Status: string }> = [];
-                for (const ap of allProgress) {
-                    for (const c of ap.file_claims) {
-                        mergedClaims.push({ "File": c.file, "Claimed By": ap.agent_id, "Status": c.status });
+                // 2. Merge file claims
+                const claimsTable = getTableFromSection(md, "File Claims");
+                if (claimsTable) {
+                    const mergedClaims: Array<{ File: string; "Claimed By": string; Status: string }> = [];
+                    for (const ap of allProgress) {
+                        for (const c of ap.file_claims) {
+                            mergedClaims.push({ "File": c.file, "Claimed By": ap.agent_id, "Status": c.status });
+                        }
                     }
+                    claimsTable.rows = mergedClaims.map(c => ({ "File": c.File, "Claimed By": c["Claimed By"], "Status": c.Status }));
+                    const u = replaceTableInSection(md, "File Claims", serializeTableToString(claimsTable.headers, claimsTable.rows));
+                    if (u) md = u;
                 }
-                claimsTable.rows = mergedClaims.map(c => ({ "File": c.File, "Claimed By": c["Claimed By"], "Status": c.Status }));
-                const updatedClaims = replaceTableInSection(md, "File Claims", serializeTableToString(claimsTable.headers, claimsTable.rows));
-                if (updatedClaims) md = updatedClaims;
-            }
 
-            // 3. Merge issues from all agents into Issues table
-            const issuesTable = getTableFromSection(md, "Issues");
-            if (issuesTable) {
-                const mergedIssues: Array<Record<string, string>> = [];
-                for (const ap of allProgress) {
-                    for (const issue of ap.issues) {
-                        mergedIssues.push({
-                            "Severity": issue.severity,
-                            "File/Area": issue.area,
-                            "Description": issue.description,
-                            "Reported By": ap.agent_id
-                        });
+                // 3. Merge issues
+                const issuesTable = getTableFromSection(md, "Issues");
+                if (issuesTable) {
+                    const mergedIssues: Array<Record<string, string>> = [];
+                    for (const ap of allProgress) {
+                        for (const issue of ap.issues) {
+                            mergedIssues.push({ "Severity": issue.severity, "File/Area": issue.area, "Description": issue.description, "Reported By": ap.agent_id });
+                        }
                     }
+                    const existingIssues = issuesTable.rows.filter(existing =>
+                        !mergedIssues.some(mi => mi["Description"] === existing["Description"] && mi["Reported By"] === existing["Reported By"])
+                    );
+                    issuesTable.rows = [...existingIssues, ...mergedIssues];
+                    const u = replaceTableInSection(md, "Issues", serializeTableToString(issuesTable.headers, issuesTable.rows));
+                    if (u) md = u;
                 }
-                // Merge: keep existing manifest issues that aren't duplicated by agent files
-                const existingIssues = issuesTable.rows.filter(existing =>
-                    !mergedIssues.some(mi => mi["Description"] === existing["Description"] && mi["Reported By"] === existing["Reported By"])
-                );
-                issuesTable.rows = [...existingIssues, ...mergedIssues];
-                const updatedIssues = replaceTableInSection(md, "Issues", serializeTableToString(issuesTable.headers, issuesTable.rows));
-                if (updatedIssues) md = updatedIssues;
-            }
 
-            // 4. Merge handoff notes from agent files into manifest
-            for (const ap of allProgress) {
-                if (ap.handoff_notes?.trim()) {
-                    const notes = ap.handoff_notes.split('\n').filter(l => l.trim());
-                    for (const note of notes) {
-                        // Only append if not already in manifest
-                        if (!md.includes(note)) {
-                            const handoffIdx = md.indexOf('## Handoff Notes');
-                            if (handoffIdx !== -1) {
-                                let insertIdx = md.indexOf('\n', handoffIdx);
-                                if (insertIdx === -1) insertIdx = md.length;
-                                else insertIdx++;
-                                const rest = md.slice(insertIdx);
-                                const commentMatch = rest.match(/^<!--[\s\S]*?-->\s*\n/);
-                                if (commentMatch) insertIdx += commentMatch[0].length;
-                                md = md.slice(0, insertIdx) + note + '\n' + md.slice(insertIdx);
+                // 4. Merge handoff notes
+                for (const ap of allProgress) {
+                    if (ap.handoff_notes?.trim()) {
+                        const notes = ap.handoff_notes.split('\n').filter(l => l.trim());
+                        for (const note of notes) {
+                            if (!md.includes(note)) {
+                                const handoffIdx = md.indexOf('## Handoff Notes');
+                                if (handoffIdx !== -1) {
+                                    let insertIdx = md.indexOf('\n', handoffIdx);
+                                    if (insertIdx === -1) insertIdx = md.length;
+                                    else insertIdx++;
+                                    const rest = md.slice(insertIdx);
+                                    const commentMatch = rest.match(/^<!--[\s\S]*?-->\s*\n/);
+                                    if (commentMatch) insertIdx += commentMatch[0].length;
+                                    md = md.slice(0, insertIdx) + note + '\n' + md.slice(insertIdx);
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            // 5. Auto-check phase gates if all agents in a phase are complete
-            const agentsTableForGates = getTableFromSection(md, "Agents") || agentsTable;
-            if (agentsTableForGates) {
-                const terminal = ["Complete", "Done"];
-                const phaseNumbers = [...new Set(agentsTableForGates.rows.map(r => r["Phase"]?.trim()).filter(Boolean))];
-                for (const ph of phaseNumbers) {
-                    const phaseRows = agentsTableForGates.rows.filter(r => r["Phase"]?.trim() === ph);
-                    // Check agent files for most current status
-                    const allPhaseComplete = phaseRows.every(r => {
-                        const ap = allProgress.find(a => a.agent_id === r["ID"]);
-                        const status = ap ? ap.status : r["Status"];
-                        return terminal.some(t => status?.includes(t));
-                    });
-                    if (allPhaseComplete) {
-                        // Auto-check the matching phase gate checkbox
-                        const gateRegex = new RegExp(`(- \\[)( )(\\]\\s*Phase ${ph}\\b)`, 'i');
-                        md = md.replace(gateRegex, '$1x$3');
+                // 5. Auto-check phase gates
+                const agentsTableForGates = getTableFromSection(md, "Agents");
+                if (agentsTableForGates) {
+                    const terminal = ["Complete", "Done"];
+                    const phaseNumbers = [...new Set(agentsTableForGates.rows.map(r => r["Phase"]?.trim()).filter(Boolean))];
+                    for (const ph of phaseNumbers) {
+                        const phaseRows = agentsTableForGates.rows.filter(r => r["Phase"]?.trim() === ph);
+                        const allPhaseComplete = phaseRows.every(r => {
+                            const ap = allProgress.find(a => a.agent_id === r["ID"]);
+                            const status = ap ? ap.status : r["Status"];
+                            return terminal.some(t => status?.includes(t));
+                        });
+                        if (allPhaseComplete) {
+                            const gateRegex = new RegExp(`(- \\[)( )(\\]\\s*Phase ${ph}\\b)`, 'i');
+                            md = md.replace(gateRegex, '$1x$3');
+                        }
                     }
                 }
-            }
 
-            // 6. Write the consolidated manifest and update swarm status
-            writeManifest(wsRoot, md);
-            writeSwarmStatus(wsRoot, md, `Rolled up progress from ${allProgress.length} agents`);
+                return { content: md, result: allProgress.map(ap => `${ap.agent_id} (${ap.role}): ${ap.status}`).join(", ") };
+            });
 
-            const summary = allProgress.map(ap => `${ap.agent_id} (${ap.role}): ${ap.status}`).join(", ");
-            return { toolResult: `Rollup complete: ${summary}`, content: [{ type: "text", text: `Rollup complete for ${allProgress.length} agents: ${summary}` }] };
+            writeSwarmStatus(wsRoot, readManifest(wsRoot), `Rolled up progress from ${allProgress.length} agents`);
+            return { toolResult: `Rollup complete: ${rollupResult}`, content: [{ type: "text", text: `Rollup complete for ${allProgress.length} agents: ${rollupResult}` }] };
         }
 
         // === GAP 1: add_agent_to_manifest ===
@@ -1196,23 +1185,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const { agent_id, role, model, phase, scope } = args as any;
             if (!agent_id || !role || !model || !phase || !scope) throw new Error("Missing required arguments");
             const wsRoot = resolveWorkspaceRoot(args as any);
-            let md = readManifest(wsRoot);
 
-            const agentsTable = getTableFromSection(md, "Agents");
-            if (!agentsTable) throw new Error("No ## Agents table found in manifest");
+            await withManifestLock(wsRoot, (md) => {
+                const agentsTable = getTableFromSection(md, "Agents");
+                if (!agentsTable) throw new Error("No ## Agents table found in manifest");
+                if (agentsTable.rows.some(r => r["ID"] === agent_id)) {
+                    throw new Error(`Agent ${agent_id} already exists in the manifest`);
+                }
+                agentsTable.rows.push({ "ID": agent_id, "Role": role, "Model": model, "Phase": phase, "Scope": scope, "Status": "⏳ Pending" });
+                const updated = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+                return { content: updated || md, result: agentsTable.rows.length };
+            });
 
-            // Check for duplicate agent ID
-            if (agentsTable.rows.some(r => r["ID"] === agent_id)) {
-                throw new Error(`Agent ${agent_id} already exists in the manifest`);
-            }
-
-            agentsTable.rows.push({ "ID": agent_id, "Role": role, "Model": model, "Phase": phase, "Scope": scope, "Status": "⏳ Pending" });
-            const updated = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
-            if (updated) {
-                writeManifest(wsRoot, updated);
-                // Update registry with agent count
-                try { updateSwarmRegistry(wsRoot, { agents_total: agentsTable.rows.length }); } catch { /* non-fatal */ }
-            }
+            try { await updateSwarmRegistry(wsRoot, { agents_total: (getTableFromSection(readManifest(wsRoot), "Agents")?.rows.length || 0) }); } catch { /* non-fatal */ }
 
             return { toolResult: `Agent ${agent_id} added`, content: [{ type: "text", text: `Added agent ${agent_id} (${role}) to Phase ${phase}` }] };
         }
@@ -1248,16 +1233,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             progress.handoff_notes = progress.handoff_notes ? progress.handoff_notes + '\n' + failNote : failNote;
             writeAgentProgress(wsRoot, progress);
 
-            // 4. Update manifest agent status
+            // 4. Update manifest agent status (locked)
             try {
-                let mdUpdated = readManifest(wsRoot);
-                const agentsTable = getTableFromSection(mdUpdated, "Agents");
-                if (agentsTable) {
-                    const row = agentsTable.rows.find(r => r["ID"] === agent_id);
-                    if (row) row["Status"] = "❌ Failed";
-                    const t = replaceTableInSection(mdUpdated, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
-                    if (t) writeManifest(wsRoot, t);
-                }
+                await withManifestLock(wsRoot, (mdUpdated) => {
+                    const agentsTable = getTableFromSection(mdUpdated, "Agents");
+                    if (agentsTable) {
+                        const row = agentsTable.rows.find(r => r["ID"] === agent_id);
+                        if (row) row["Status"] = "❌ Failed";
+                        const t = replaceTableInSection(mdUpdated, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+                        return { content: t || mdUpdated, result: null };
+                    }
+                    return { content: null, result: null };
+                });
             } catch { /* non-fatal */ }
 
             // 5. Clean up any lock files for this agent
@@ -1289,7 +1276,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 message,
                 workspace: wsRoot,
                 session_id: sessionId
-            });
+            }).catch(() => { /* non-fatal */ });
 
             // Also post as handoff note for persistence
             const timestamp = new Date().toISOString().slice(0, 19);
@@ -1324,33 +1311,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const { section, rows } = args as any;
             if (!section || !rows) throw new Error("Missing required arguments: section, rows");
             const wsRoot = resolveWorkspaceRoot(args as any);
-            let md = readManifest(wsRoot);
 
-            const table = getTableFromSection(md, section);
-            if (table) {
-                // Replace existing table — use incoming row keys as headers if available
-                const headers = rows.length > 0 ? Object.keys(rows[0]) : table.headers;
-                const updated = replaceTableInSection(md, section, serializeTableToString(headers, rows));
-                if (updated) {
-                    writeManifest(wsRoot, updated);
-                    return { toolResult: `Section ${section} updated`, content: [{ type: "text", text: `Updated ${section} with ${rows.length} rows` }] };
+            const resultText = await withManifestLock(wsRoot, (md) => {
+                const table = getTableFromSection(md, section);
+                if (table) {
+                    const headers = rows.length > 0 ? Object.keys(rows[0]) : table.headers;
+                    const updated = replaceTableInSection(md, section, serializeTableToString(headers, rows));
+                    if (updated) return { content: updated, result: `Updated ${section} with ${rows.length} rows` };
                 }
-            }
 
-            // If no table exists yet, try to create one after the section heading
-            const sectionIdx = md.indexOf(`## ${section}`);
-            if (sectionIdx === -1) throw new Error(`Section "## ${section}" not found in manifest`);
+                // If no table exists yet, create one after the section heading
+                const sectionIdx = md.indexOf(`## ${section}`);
+                if (sectionIdx === -1) throw new Error(`Section "## ${section}" not found in manifest`);
+                if (rows.length === 0) throw new Error("Rows array is empty");
+                const headers = Object.keys(rows[0]);
+                const tableStr = serializeTableToString(headers, rows);
+                let insertIdx = md.indexOf('\n', sectionIdx);
+                if (insertIdx === -1) insertIdx = md.length;
+                else insertIdx++;
+                const newMd = md.slice(0, insertIdx) + '\n' + tableStr + '\n' + md.slice(insertIdx);
+                return { content: newMd, result: `Created ${section} table with ${rows.length} rows` };
+            });
 
-            // Build table from rows
-            if (rows.length === 0) throw new Error("Rows array is empty");
-            const headers = Object.keys(rows[0]);
-            const tableStr = serializeTableToString(headers, rows);
-            let insertIdx = md.indexOf('\n', sectionIdx);
-            if (insertIdx === -1) insertIdx = md.length;
-            else insertIdx++;
-            md = md.slice(0, insertIdx) + '\n' + tableStr + '\n' + md.slice(insertIdx);
-            writeManifest(wsRoot, md);
-            return { toolResult: `Section ${section} created`, content: [{ type: "text", text: `Created ${section} table with ${rows.length} rows` }] };
+            return { toolResult: resultText, content: [{ type: "text", text: resultText }] };
         }
 
         // === GAP 9: reassign_agent ===
@@ -1358,46 +1341,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const { from_agent_id, to_agent_id, to_role, to_model } = args as any;
             if (!from_agent_id || !to_agent_id) throw new Error("Missing required arguments");
             const wsRoot = resolveWorkspaceRoot(args as any);
-            let md = readManifest(wsRoot);
-            const sessionId = extractSessionId(md);
 
-            // 1. Read source agent's progress
+            // 1. Read source agent's progress (outside lock)
             const fromProgress = readAgentProgress(wsRoot, from_agent_id);
-            const agentsTable = getTableFromSection(md, "Agents");
-            if (!agentsTable) throw new Error("No Agents table in manifest");
-            const fromRow = agentsTable.rows.find(r => r["ID"] === from_agent_id);
-            if (!fromRow) throw new Error(`Agent ${from_agent_id} not found in manifest`);
-
-            // 2. Get uncompleted file claims
             const pendingClaims = fromProgress?.file_claims.filter(c => c.status !== "✅ Done") || [];
 
-            // 3. Create new agent row
-            const newRow = {
-                "ID": to_agent_id,
-                "Role": to_role || fromRow["Role"],
-                "Model": to_model || fromRow["Model"],
-                "Phase": fromRow["Phase"],
-                "Scope": fromRow["Scope"],
-                "Status": "⏳ Pending"
-            };
-            agentsTable.rows.push(newRow);
+            // 2. Modify manifest (locked)
+            const { newRow, sessionId } = await withManifestLock(wsRoot, (md) => {
+                const sid = extractSessionId(md);
+                const agentsTable = getTableFromSection(md, "Agents");
+                if (!agentsTable) throw new Error("No Agents table in manifest");
+                const fromRow = agentsTable.rows.find(r => r["ID"] === from_agent_id);
+                if (!fromRow) throw new Error(`Agent ${from_agent_id} not found in manifest`);
 
-            // 4. Mark old agent as reassigned
-            fromRow["Status"] = "🔄 Reassigned → " + to_agent_id;
-            const updated = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
-            if (updated) writeManifest(wsRoot, updated);
+                const nr = {
+                    "ID": to_agent_id,
+                    "Role": to_role || fromRow["Role"],
+                    "Model": to_model || fromRow["Model"],
+                    "Phase": fromRow["Phase"],
+                    "Scope": fromRow["Scope"],
+                    "Status": "⏳ Pending"
+                };
+                agentsTable.rows.push(nr);
+                fromRow["Status"] = "🔄 Reassigned → " + to_agent_id;
+                const updated = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+                return { content: updated || md, result: { newRow: nr, sessionId: sid } };
+            });
 
-            // 5. Create initial progress for new agent with transferred claims
+            // 3. Create progress for new agent (outside lock)
             const newProgress = createAgentProgress(to_agent_id, newRow["Role"], newRow["Phase"], sessionId);
             newProgress.detail = `Reassigned from ${from_agent_id}`;
             for (const claim of pendingClaims) {
                 newProgress.file_claims.push({ file: claim.file, status: "📋 Transferred" });
             }
-            const transferNote = `Reassigned from ${from_agent_id}. Pending files: ${pendingClaims.map(c => c.file).join(", ") || "none"}`;
-            newProgress.handoff_notes = transferNote;
+            newProgress.handoff_notes = `Reassigned from ${from_agent_id}. Pending files: ${pendingClaims.map(c => c.file).join(", ") || "none"}`;
             writeAgentProgress(wsRoot, newProgress);
 
-            // 6. Post handoff note
             if (fromProgress) {
                 const ts = new Date().toISOString().slice(0, 19);
                 fromProgress.handoff_notes = (fromProgress.handoff_notes || '') + `\n[${ts}] [SYSTEM] ${from_agent_id} reassigned to ${to_agent_id}`;
@@ -1451,80 +1430,90 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const { from_phase, to_phase } = args as any;
             if (!from_phase || !to_phase) throw new Error("Missing required arguments");
             const wsRoot = resolveWorkspaceRoot(args as any);
-            let md = readManifest(wsRoot);
-            const sessionId = extractSessionId(md);
 
-            // 1. Validate from_phase gate
+            // Read agent progress outside lock
+            const mdForSession = readManifest(wsRoot);
+            const sessionId = extractSessionId(mdForSession);
             const allProgress = readAllAgentProgress(wsRoot, sessionId);
-            const agentsTable = getTableFromSection(md, "Agents");
-            const fromPhaseAgents = (agentsTable?.rows || []).filter(r => r["Phase"]?.trim() === from_phase);
-            const terminal = ["Complete", "Done", "Failed"];
-            const allDone = fromPhaseAgents.every(r => {
-                const ap = allProgress.find(a => a.agent_id === r["ID"]);
-                const status = ap ? ap.status : r["Status"];
-                return terminal.some(t => status?.includes(t));
-            });
 
-            if (!allDone) {
-                const pending = fromPhaseAgents.filter(r => {
+            // Lock manifest for validation + rollup + gate check
+            const advanceResult = await withManifestLock(wsRoot, (md) => {
+                const agentsTable = getTableFromSection(md, "Agents");
+                const fromPhaseAgents = (agentsTable?.rows || []).filter(r => r["Phase"]?.trim() === from_phase);
+                const terminal = ["Complete", "Done", "Failed"];
+                const allDone = fromPhaseAgents.every(r => {
                     const ap = allProgress.find(a => a.agent_id === r["ID"]);
                     const status = ap ? ap.status : r["Status"];
-                    return !terminal.some(t => status?.includes(t));
-                }).map(r => r["ID"]);
-                throw new Error(`Phase ${from_phase} not complete. Pending agents: ${pending.join(", ")}`);
-            }
+                    return terminal.some(t => status?.includes(t));
+                });
 
-            // 2. Rollup progress
-            if (agentsTable) {
-                for (const ap of allProgress) {
-                    const row = agentsTable.rows.find(r => r["ID"] === ap.agent_id);
-                    if (row) row["Status"] = ap.status;
+                if (!allDone) {
+                    const pending = fromPhaseAgents.filter(r => {
+                        const ap = allProgress.find(a => a.agent_id === r["ID"]);
+                        const status = ap ? ap.status : r["Status"];
+                        return !terminal.some(t => status?.includes(t));
+                    }).map(r => r["ID"]);
+                    throw new Error(`Phase ${from_phase} not complete. Pending agents: ${pending.join(", ")}`);
                 }
-                const u = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
-                if (u) md = u;
-            }
 
-            // 3. Auto-check phase gate
-            const gateRegex = new RegExp(`(- \\[)( )(\\]\\s*Phase ${from_phase}\\b)`, 'i');
-            md = md.replace(gateRegex, '$1x$3');
-            writeManifest(wsRoot, md);
+                // Rollup progress
+                if (agentsTable) {
+                    for (const ap of allProgress) {
+                        const row = agentsTable.rows.find(r => r["ID"] === ap.agent_id);
+                        if (row) row["Status"] = ap.status;
+                    }
+                    const u = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+                    if (u) md = u;
+                }
 
-            // 4. Update registry
-            try { updateSwarmRegistry(wsRoot, { phase: to_phase }); } catch { /* non-fatal */ }
+                // Auto-check phase gate
+                const gateRegex = new RegExp(`(- \\[)( )(\\]\\s*Phase ${from_phase}\\b)`, 'i');
+                md = md.replace(gateRegex, '$1x$3');
 
-            // 5. Return Phase 2 agents
-            const nextPhaseAgents = (agentsTable?.rows || []).filter(r => r["Phase"]?.trim() === to_phase);
-            writeSwarmStatus(wsRoot, md, `Phase ${from_phase} → ${to_phase}`);
+                const nextPhaseAgents = (agentsTable?.rows || []).filter(r => r["Phase"]?.trim() === to_phase);
+                const failedInPhase = fromPhaseAgents.filter(r => {
+                    const ap2 = allProgress.find(a => a.agent_id === r["ID"]);
+                    const st = ap2 ? ap2.status : r["Status"];
+                    return st?.includes("Failed");
+                }).length;
 
-            const failedInPhase = fromPhaseAgents.filter(r => {
-                const ap2 = allProgress.find(a => a.agent_id === r["ID"]);
-                const st = ap2 ? ap2.status : r["Status"];
-                return st?.includes("Failed");
-            }).length;
+                return {
+                    content: md,
+                    result: { nextPhaseAgents, failedInPhase }
+                };
+            });
 
-            return { toolResult: `Advanced to phase ${to_phase}`, content: [{ type: "text", text: `Phase ${from_phase} complete ✅${failedInPhase > 0 ? ` (⚠️ ${failedInPhase} agent(s) failed)` : ''}. Advanced to Phase ${to_phase}. Next agents: ${nextPhaseAgents.map(a => `${a["ID"]} (${a["Role"]})`).join(", ") || "none"}` }] };
+            try { await updateSwarmRegistry(wsRoot, { phase: to_phase }); } catch { /* non-fatal */ }
+            writeSwarmStatus(wsRoot, readManifest(wsRoot), `Phase ${from_phase} → ${to_phase}`);
+
+            return { toolResult: `Advanced to phase ${to_phase}`, content: [{ type: "text", text: `Phase ${from_phase} complete ✅${advanceResult.failedInPhase > 0 ? ` (⚠️ ${advanceResult.failedInPhase} agent(s) failed)` : ''}. Advanced to Phase ${to_phase}. Next agents: ${advanceResult.nextPhaseAgents.map(a => `${a["ID"]} (${a["Role"]})`).join(", ") || "none"}` }] };
         }
 
         // === GAP 17: complete_swarm ===
         if (name === "complete_swarm") {
             const wsRoot = resolveWorkspaceRoot(args as any);
-            let md = readManifest(wsRoot);
-            const sessionId = extractSessionId(md);
 
-            // 1. Final rollup
+            // Read session info outside lock
+            const mdForSession = readManifest(wsRoot);
+            const sessionId = extractSessionId(mdForSession);
             const allProgress = readAllAgentProgress(wsRoot, sessionId);
-            const agentsTable = getTableFromSection(md, "Agents");
-            if (agentsTable) {
-                for (const ap of allProgress) {
-                    const row = agentsTable.rows.find(r => r["ID"] === ap.agent_id);
-                    if (row) row["Status"] = ap.status;
-                }
-                const u = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
-                if (u) md = u;
-            }
-            writeManifest(wsRoot, md);
 
-            // 2. Archive manifest
+            // 1. Final rollup (locked)
+            await withManifestLock(wsRoot, (md) => {
+                const agentsTable = getTableFromSection(md, "Agents");
+                if (agentsTable) {
+                    for (const ap of allProgress) {
+                        const row = agentsTable.rows.find(r => r["ID"] === ap.agent_id);
+                        if (row) row["Status"] = ap.status;
+                    }
+                    const u = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+                    if (u) md = u;
+                }
+                return { content: md, result: null };
+            });
+
+            // 2. Archive manifest (read final version)
+            const md = readManifest(wsRoot);
             const archiveDir = path.join(wsRoot, '.swarm-archives');
             if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
             const archiveName = `swarm-manifest-${sessionId.replace(/[:.]/g, '-')}.md`;
@@ -1537,11 +1526,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             try { cleanupEvents(wsRoot, sessionId); } catch { /* non-fatal */ }
 
             // 5. Deregister from swarm registry
-            try { deregisterSwarm(wsRoot); } catch { /* non-fatal */ }
+            try { await deregisterSwarm(wsRoot); } catch { /* non-fatal */ }
 
             // 6. Write final status
             writeSwarmStatus(wsRoot, md, "Swarm completed");
 
+            const agentsTable = getTableFromSection(md, "Agents");
             const totalAgents = agentsTable?.rows.length || 0;
             const completedAgents = allProgress.filter(a => a.status?.includes("Complete") || a.status?.includes("Done")).length;
             const failedAgents = allProgress.filter(a => a.status?.includes("Failed")).length;
@@ -1618,15 +1608,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const { phase_number, complete } = args as any;
             if (phase_number === undefined || complete === undefined) throw new Error("Missing required arguments");
             const wsRoot = resolveWorkspaceRoot(args as any);
-            let md = readManifest(wsRoot);
 
-            const checkChar = complete ? 'x' : ' ';
-            const uncheckedRegex = new RegExp(`(- \\[)[ x](\\]\\s*Phase ${phase_number}\\b)`, 'i');
-            const newMd = md.replace(uncheckedRegex, `$1${checkChar}$2`);
+            await withManifestLock(wsRoot, (md) => {
+                const checkChar = complete ? 'x' : ' ';
+                const uncheckedRegex = new RegExp(`(- \\[)[ x](\\]\\s*Phase ${phase_number}\\b)`, 'i');
+                const newMd = md.replace(uncheckedRegex, `$1${checkChar}$2`);
+                if (newMd === md) throw new Error(`Phase gate ${phase_number} not found in manifest`);
+                return { content: newMd, result: null };
+            });
 
-            if (newMd === md) throw new Error(`Phase gate ${phase_number} not found in manifest`);
-            writeManifest(wsRoot, newMd);
-            writeSwarmStatus(wsRoot, newMd, `Phase gate ${phase_number} ${complete ? 'checked' : 'unchecked'}`);
+            writeSwarmStatus(wsRoot, readManifest(wsRoot), `Phase gate ${phase_number} ${complete ? 'checked' : 'unchecked'}`);
 
             return { toolResult: `Phase gate ${phase_number} updated`, content: [{ type: "text", text: `Phase gate ${phase_number} ${complete ? '✅ checked' : '⬜ unchecked'}` }] };
         }
@@ -1635,20 +1626,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const { agent_id, file_path } = args as any;
             if (!agent_id || !file_path) throw new Error("Missing required arguments");
             const wsRoot = resolveWorkspaceRoot(args as any);
-            let md = readManifest(wsRoot);
-            const sessionId = extractSessionId(md);
 
-            // 1. Expand agent's scope in manifest
-            const agentsTable = getTableFromSection(md, "Agents");
-            if (agentsTable) {
-                const row = agentsTable.rows.find(r => r["ID"] === agent_id);
-                if (row) {
-                    const currentScope = row["Scope"] || '';
-                    row["Scope"] = currentScope ? `${currentScope}, ${file_path}` : file_path;
-                    const updated = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
-                    if (updated) writeManifest(wsRoot, updated);
+            // 1. Expand agent's scope in manifest (locked)
+            await withManifestLock(wsRoot, (md) => {
+                const agentsTable = getTableFromSection(md, "Agents");
+                if (agentsTable) {
+                    const row = agentsTable.rows.find(r => r["ID"] === agent_id);
+                    if (row) {
+                        const currentScope = row["Scope"] || '';
+                        row["Scope"] = currentScope ? `${currentScope}, ${file_path}` : file_path;
+                        const updated = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+                        return { content: updated || md, result: null };
+                    }
                 }
-            }
+                return { content: null, result: null };
+            });
 
             // 2. Resolve the scope request in agent progress (mark as approved)
             let progress = readAgentProgress(wsRoot, agent_id);
@@ -1693,19 +1685,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const { agent_id } = args as any;
             if (!agent_id) throw new Error("Missing required argument: agent_id");
             const wsRoot = resolveWorkspaceRoot(args as any);
-            let md = readManifest(wsRoot);
 
-            const agentsTable = getTableFromSection(md, "Agents");
-            if (!agentsTable) throw new Error("No Agents table in manifest");
-            const idx = agentsTable.rows.findIndex(r => r["ID"] === agent_id);
-            if (idx === -1) throw new Error(`Agent ${agent_id} not found in manifest`);
+            await withManifestLock(wsRoot, (md) => {
+                const agentsTable = getTableFromSection(md, "Agents");
+                if (!agentsTable) throw new Error("No Agents table in manifest");
+                const idx = agentsTable.rows.findIndex(r => r["ID"] === agent_id);
+                if (idx === -1) throw new Error(`Agent ${agent_id} not found in manifest`);
+                agentsTable.rows.splice(idx, 1);
+                const updated = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+                return { content: updated || md, result: agentsTable.rows.length };
+            });
 
-            agentsTable.rows.splice(idx, 1);
-            const updated = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
-            if (updated) {
-                writeManifest(wsRoot, updated);
-                try { updateSwarmRegistry(wsRoot, { agents_total: agentsTable.rows.length }); } catch { /* non-fatal */ }
-            }
+            try { await updateSwarmRegistry(wsRoot, { agents_total: (getTableFromSection(readManifest(wsRoot), "Agents")?.rows.length || 0) }); } catch { /* non-fatal */ }
 
             return { toolResult: `Agent ${agent_id} removed`, content: [{ type: "text", text: `Removed agent ${agent_id} from manifest` }] };
         }
@@ -1715,24 +1706,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const { agent_id, role, model, scope } = args as any;
             if (!agent_id) throw new Error("Missing required argument: agent_id");
             const wsRoot = resolveWorkspaceRoot(args as any);
-            let md = readManifest(wsRoot);
 
-            const agentsTable = getTableFromSection(md, "Agents");
-            if (!agentsTable) throw new Error("No Agents table in manifest");
-            const row = agentsTable.rows.find(r => r["ID"] === agent_id);
-            if (!row) throw new Error(`Agent ${agent_id} not found in manifest`);
+            const changes = await withManifestLock(wsRoot, (md) => {
+                const agentsTable = getTableFromSection(md, "Agents");
+                if (!agentsTable) throw new Error("No Agents table in manifest");
+                const row = agentsTable.rows.find(r => r["ID"] === agent_id);
+                if (!row) throw new Error(`Agent ${agent_id} not found in manifest`);
 
-            const changes: string[] = [];
-            if (role) { row["Role"] = role; changes.push(`role=${role}`); }
-            if (model) { row["Model"] = model; changes.push(`model=${model}`); }
-            if (scope) { row["Scope"] = scope; changes.push(`scope=${scope}`); }
+                const ch: string[] = [];
+                if (role) { row["Role"] = role; ch.push(`role=${role}`); }
+                if (model) { row["Model"] = model; ch.push(`model=${model}`); }
+                if (scope) { row["Scope"] = scope; ch.push(`scope=${scope}`); }
+                if (ch.length === 0) throw new Error("No fields to update. Provide at least one of: role, model, scope");
 
-            if (changes.length === 0) throw new Error("No fields to update. Provide at least one of: role, model, scope");
+                const updated = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+                return { content: updated || md, result: ch.join(", ") };
+            });
 
-            const updated = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
-            if (updated) writeManifest(wsRoot, updated);
-
-            return { toolResult: `Agent ${agent_id} updated`, content: [{ type: "text", text: `Updated agent ${agent_id}: ${changes.join(", ")}` }] };
+            return { toolResult: `Agent ${agent_id} updated`, content: [{ type: "text", text: `Updated agent ${agent_id}: ${changes}` }] };
         }
 
         throw new Error(`Unknown tool: ${name}`);
