@@ -26,6 +26,15 @@ import {
 import path from "path";
 import os from "os";
 import fs from "fs";
+import {
+    registerSwarm,
+    updateSwarmRegistry,
+    deregisterSwarm,
+    listActiveSwarms,
+    broadcastEvent,
+    getEvents,
+    cleanupEvents
+} from "./utils/swarm-registry.js";
 
 // Read version from package.json at startup
 const PKG = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([a-zA-Z]:)/, '$1')), '..', '..', 'package.json'), 'utf8'));
@@ -223,6 +232,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                     properties: {
                         agent_id: { type: "string", description: "The agent id (e.g. α, β)" },
                         status: { type: "string", description: "New status like '✅ Complete', '🔄 Active', '⏳ Pending'" },
+                        detail: { type: "string", description: "Optional progress detail (e.g. '3/7 files done')" },
+                        phase: { type: "string", description: "Optional phase update" },
                         workspace_root: { type: "string", description: "Optional workspace root override" }
                     },
                     required: ["agent_id", "status"]
@@ -363,6 +374,177 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                         workspace_root: { type: "string", description: "Optional workspace root override" }
                     }
                 }
+            },
+            {
+                name: "add_agent_to_manifest",
+                description: "Add an agent row to the Agents table in the manifest",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        agent_id: { type: "string", description: "Agent ID (e.g. α, β)" },
+                        role: { type: "string", description: "Agent role (e.g. Developer, QA)" },
+                        model: { type: "string", description: "Model name" },
+                        phase: { type: "string", description: "Phase number" },
+                        scope: { type: "string", description: "File/directory scope" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    },
+                    required: ["agent_id", "role", "model", "phase", "scope"]
+                }
+            },
+            {
+                name: "mark_agent_failed",
+                description: "Mark an agent as failed, release all its file claims, and post an automatic handoff note",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        agent_id: { type: "string" },
+                        reason: { type: "string", description: "Why the agent failed" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    },
+                    required: ["agent_id", "reason"]
+                }
+            },
+            {
+                name: "broadcast_event",
+                description: "Broadcast a structured event to all agents in the swarm (e.g. build_broken, dependency_added, api_changed, critical_blocker)",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        agent_id: { type: "string", description: "Agent posting the event" },
+                        event_type: { type: "string", description: "Event type: build_broken, dependency_added, api_changed, critical_blocker, info" },
+                        message: { type: "string", description: "Event details" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    },
+                    required: ["agent_id", "event_type", "message"]
+                }
+            },
+            {
+                name: "get_events",
+                description: "Retrieve broadcast events, optionally filtered by type",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        event_type: { type: "string", description: "Optional filter by event type" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    }
+                }
+            },
+            {
+                name: "list_active_swarms",
+                description: "List all active swarms across all workspaces",
+                inputSchema: { type: "object", properties: {} }
+            },
+            {
+                name: "set_manifest_field",
+                description: "Set a table in a specific manifest section (e.g. Quota Check, Branches)",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        section: { type: "string", description: "Section heading (e.g. Quota Check)" },
+                        rows: { type: "array", description: "Array of row objects with column headers as keys", items: { type: "object" } },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    },
+                    required: ["section", "rows"]
+                }
+            },
+            {
+                name: "reassign_agent",
+                description: "Transfer scope and uncompleted work from a failed/stale agent to a replacement agent",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        from_agent_id: { type: "string" },
+                        to_agent_id: { type: "string" },
+                        to_role: { type: "string", description: "Role for the replacement agent" },
+                        to_model: { type: "string", description: "Model for the replacement agent" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    },
+                    required: ["from_agent_id", "to_agent_id"]
+                }
+            },
+            {
+                name: "request_scope_expansion",
+                description: "Request permission to edit a file outside your assigned scope. Creates a pending request visible in get_swarm_status.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        agent_id: { type: "string" },
+                        file_path: { type: "string", description: "File outside current scope" },
+                        reason: { type: "string" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    },
+                    required: ["agent_id", "file_path", "reason"]
+                }
+            },
+            {
+                name: "check_quota",
+                description: "Read the current model quota snapshot (runs quota check if stale)",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    }
+                }
+            },
+            {
+                name: "advance_phase",
+                description: "Atomically: validate phase gate, rollup agent progress, check gate checkbox, return next phase agent list",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        from_phase: { type: "string" },
+                        to_phase: { type: "string" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    },
+                    required: ["from_phase", "to_phase"]
+                }
+            },
+            {
+                name: "complete_swarm",
+                description: "Finalize swarm: final rollup, archive manifest, clean up agent files, deregister from swarm registry",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    }
+                }
+            },
+            {
+                name: "get_my_assignment",
+                description: "Get a specific agent's assignment details from the manifest",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        agent_id: { type: "string" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    },
+                    required: ["agent_id"]
+                }
+            },
+            {
+                name: "get_agent_progress",
+                description: "Get detailed progress for a specific agent (status, file claims, issues, notes)",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        agent_id: { type: "string" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    },
+                    required: ["agent_id"]
+                }
+            },
+            {
+                name: "update_phase_gate",
+                description: "Manually check or uncheck a phase gate checkbox",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        phase_number: { type: "string" },
+                        complete: { type: "boolean", description: "true to check, false to uncheck" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    },
+                    required: ["phase_number", "complete"]
+                }
             }
         ]
     };
@@ -397,6 +579,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             writeManifest(wsRoot, content);
             writeSwarmStatus(wsRoot, content, "Swarm initialized");
+
+            // Register in global swarm registry
+            try {
+                registerSwarm({
+                    workspace: wsRoot,
+                    session_id: sessionId,
+                    mission: mission.substring(0, 200),
+                    phase: "0",
+                    agents_active: 0,
+                    agents_total: 0,
+                    supervision,
+                    started_at: new Date().toISOString(),
+                    last_updated: new Date().toISOString(),
+                    status: "active"
+                });
+            } catch { /* registry write is non-fatal */ }
+
             return { toolResult: "Manifest created successfully.", content: [{ type: "text", text: `Manifest created (session: ${sessionId}). Cleaned ${cleaned} old agent files.` }] };
         }
 
@@ -427,9 +626,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 progress = createAgentProgress(agent_id, row?.["Role"] || "unknown", row?.["Phase"] || "1", sessionId);
             }
             progress.status = status;
+            const detail = (args as any)?.detail;
+            if (detail) progress.detail = detail;
+            const phase = (args as any)?.phase;
+            if (phase) progress.phase = phase;
             writeAgentProgress(wsRoot, progress);
 
-            return { toolResult: `Agent ${agent_id} status updated to ${status}`, content: [{ type: "text", text: `Agent ${agent_id} status updated to ${status} (written to agent progress file)` }] };
+            return { toolResult: `Agent ${agent_id} status updated to ${status}`, content: [{ type: "text", text: `Agent ${agent_id} status updated to ${status}${detail ? ` (${detail})` : ''} (written to agent progress file)` }] };
         }
 
         if (name === "check_phase_gates") {
@@ -884,6 +1087,403 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             const summary = allProgress.map(ap => `${ap.agent_id} (${ap.role}): ${ap.status}`).join(", ");
             return { toolResult: `Rollup complete: ${summary}`, content: [{ type: "text", text: `Rollup complete for ${allProgress.length} agents: ${summary}` }] };
+        }
+
+        // === GAP 1: add_agent_to_manifest ===
+        if (name === "add_agent_to_manifest") {
+            const { agent_id, role, model, phase, scope } = args as any;
+            if (!agent_id || !role || !model || !phase || !scope) throw new Error("Missing required arguments");
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            let md = readManifest(wsRoot);
+
+            const agentsTable = getTableFromSection(md, "Agents");
+            if (!agentsTable) throw new Error("No ## Agents table found in manifest");
+
+            // Check for duplicate agent ID
+            if (agentsTable.rows.some(r => r["ID"] === agent_id)) {
+                throw new Error(`Agent ${agent_id} already exists in the manifest`);
+            }
+
+            agentsTable.rows.push({ "ID": agent_id, "Role": role, "Model": model, "Phase": phase, "Scope": scope, "Status": "⏳ Pending" });
+            const updated = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+            if (updated) {
+                writeManifest(wsRoot, updated);
+                // Update registry with agent count
+                try { updateSwarmRegistry(wsRoot, { agents_total: agentsTable.rows.length }); } catch { /* non-fatal */ }
+            }
+
+            return { toolResult: `Agent ${agent_id} added`, content: [{ type: "text", text: `Added agent ${agent_id} (${role}) to Phase ${phase}` }] };
+        }
+
+        // === GAP 7: mark_agent_failed ===
+        if (name === "mark_agent_failed") {
+            const { agent_id, reason } = args as any;
+            if (!agent_id || !reason) throw new Error("Missing required arguments");
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            const md = readManifest(wsRoot);
+            const sessionId = extractSessionId(md);
+
+            // 1. Update agent status to Failed
+            let progress = readAgentProgress(wsRoot, agent_id);
+            if (!progress) {
+                progress = createAgentProgress(agent_id, "unknown", "0", sessionId);
+            }
+            progress.status = "❌ Failed";
+            progress.detail = reason;
+
+            // 2. Release all active file claims
+            const releasedFiles: string[] = [];
+            for (const claim of progress.file_claims) {
+                if (claim.status !== "✅ Done") {
+                    claim.status = "⚠️ Abandoned";
+                    releasedFiles.push(claim.file);
+                }
+            }
+
+            // 3. Auto-post handoff note
+            const timestamp = new Date().toISOString().slice(0, 19);
+            const failNote = `[${timestamp}] [SYSTEM] Agent ${agent_id} failed: ${reason}. Released files: ${releasedFiles.join(", ") || "none"}`;
+            progress.handoff_notes = progress.handoff_notes ? progress.handoff_notes + '\n' + failNote : failNote;
+            writeAgentProgress(wsRoot, progress);
+
+            // 4. Update manifest agent status
+            try {
+                let mdUpdated = readManifest(wsRoot);
+                const agentsTable = getTableFromSection(mdUpdated, "Agents");
+                if (agentsTable) {
+                    const row = agentsTable.rows.find(r => r["ID"] === agent_id);
+                    if (row) row["Status"] = "❌ Failed";
+                    const t = replaceTableInSection(mdUpdated, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+                    if (t) writeManifest(wsRoot, t);
+                }
+            } catch { /* non-fatal */ }
+
+            // 5. Clean up any lock files for this agent
+            try {
+                const lockFiles = fs.readdirSync(wsRoot).filter(f => f.startsWith('.claim-lock-'));
+                for (const lf of lockFiles) {
+                    const content = fs.readFileSync(path.join(wsRoot, lf), 'utf8');
+                    if (content.trim() === agent_id) {
+                        fs.unlinkSync(path.join(wsRoot, lf));
+                    }
+                }
+            } catch { /* non-fatal */ }
+
+            return { toolResult: `Agent ${agent_id} marked as failed`, content: [{ type: "text", text: `Agent ${agent_id} marked ❌ Failed. Released ${releasedFiles.length} file claims. Reason: ${reason}` }] };
+        }
+
+        // === GAP 10: broadcast_event ===
+        if (name === "broadcast_event") {
+            const { agent_id, event_type, message } = args as any;
+            if (!agent_id || !event_type || !message) throw new Error("Missing required arguments");
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            const md = readManifest(wsRoot);
+            const sessionId = extractSessionId(md);
+
+            broadcastEvent({
+                timestamp: new Date().toISOString(),
+                agent_id,
+                event_type,
+                message,
+                workspace: wsRoot,
+                session_id: sessionId
+            });
+
+            // Also post as handoff note for persistence
+            const timestamp = new Date().toISOString().slice(0, 19);
+            const noteText = `[${timestamp}] [EVENT:${event_type.toUpperCase()}] ${agent_id}: ${message}`;
+            let progress = readAgentProgress(wsRoot, agent_id);
+            if (progress) {
+                progress.handoff_notes = progress.handoff_notes ? progress.handoff_notes + '\n' + noteText : noteText;
+                writeAgentProgress(wsRoot, progress);
+            }
+
+            return { toolResult: `Event broadcast: ${event_type}`, content: [{ type: "text", text: `Event [${event_type}] broadcast by ${agent_id}: ${message}` }] };
+        }
+
+        // === GAP 10: get_events ===
+        if (name === "get_events") {
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            const md = readManifest(wsRoot);
+            const sessionId = extractSessionId(md);
+            const eventType = (args as any)?.event_type;
+            const events = getEvents(wsRoot, sessionId, eventType);
+            return { toolResult: JSON.stringify(events), content: [{ type: "text", text: events.length > 0 ? JSON.stringify(events, null, 2) : "(No events found)" }] };
+        }
+
+        // === GAP 12: list_active_swarms ===
+        if (name === "list_active_swarms") {
+            const swarms = listActiveSwarms();
+            return { toolResult: JSON.stringify(swarms), content: [{ type: "text", text: swarms.length > 0 ? JSON.stringify(swarms, null, 2) : "(No active swarms)" }] };
+        }
+
+        // === GAP 2: set_manifest_field ===
+        if (name === "set_manifest_field") {
+            const { section, rows } = args as any;
+            if (!section || !rows) throw new Error("Missing required arguments: section, rows");
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            let md = readManifest(wsRoot);
+
+            const table = getTableFromSection(md, section);
+            if (table) {
+                // Replace existing table
+                table.rows = rows;
+                const updated = replaceTableInSection(md, section, serializeTableToString(table.headers, rows));
+                if (updated) {
+                    writeManifest(wsRoot, updated);
+                    return { toolResult: `Section ${section} updated`, content: [{ type: "text", text: `Updated ${section} with ${rows.length} rows` }] };
+                }
+            }
+
+            // If no table exists yet, try to create one after the section heading
+            const sectionIdx = md.indexOf(`## ${section}`);
+            if (sectionIdx === -1) throw new Error(`Section "## ${section}" not found in manifest`);
+
+            // Build table from rows
+            if (rows.length === 0) throw new Error("Rows array is empty");
+            const headers = Object.keys(rows[0]);
+            const tableStr = serializeTableToString(headers, rows);
+            let insertIdx = md.indexOf('\n', sectionIdx);
+            if (insertIdx === -1) insertIdx = md.length;
+            else insertIdx++;
+            md = md.slice(0, insertIdx) + '\n' + tableStr + '\n' + md.slice(insertIdx);
+            writeManifest(wsRoot, md);
+            return { toolResult: `Section ${section} created`, content: [{ type: "text", text: `Created ${section} table with ${rows.length} rows` }] };
+        }
+
+        // === GAP 9: reassign_agent ===
+        if (name === "reassign_agent") {
+            const { from_agent_id, to_agent_id, to_role, to_model } = args as any;
+            if (!from_agent_id || !to_agent_id) throw new Error("Missing required arguments");
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            let md = readManifest(wsRoot);
+            const sessionId = extractSessionId(md);
+
+            // 1. Read source agent's progress
+            const fromProgress = readAgentProgress(wsRoot, from_agent_id);
+            const agentsTable = getTableFromSection(md, "Agents");
+            if (!agentsTable) throw new Error("No Agents table in manifest");
+            const fromRow = agentsTable.rows.find(r => r["ID"] === from_agent_id);
+            if (!fromRow) throw new Error(`Agent ${from_agent_id} not found in manifest`);
+
+            // 2. Get uncompleted file claims
+            const pendingClaims = fromProgress?.file_claims.filter(c => c.status !== "✅ Done") || [];
+
+            // 3. Create new agent row
+            const newRow = {
+                "ID": to_agent_id,
+                "Role": to_role || fromRow["Role"],
+                "Model": to_model || fromRow["Model"],
+                "Phase": fromRow["Phase"],
+                "Scope": fromRow["Scope"],
+                "Status": "⏳ Pending"
+            };
+            agentsTable.rows.push(newRow);
+
+            // 4. Mark old agent as reassigned
+            fromRow["Status"] = "🔄 Reassigned → " + to_agent_id;
+            const updated = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+            if (updated) writeManifest(wsRoot, updated);
+
+            // 5. Create initial progress for new agent with transferred claims
+            const newProgress = createAgentProgress(to_agent_id, newRow["Role"], newRow["Phase"], sessionId);
+            newProgress.detail = `Reassigned from ${from_agent_id}`;
+            for (const claim of pendingClaims) {
+                newProgress.file_claims.push({ file: claim.file, status: "📋 Transferred" });
+            }
+            const transferNote = `Reassigned from ${from_agent_id}. Pending files: ${pendingClaims.map(c => c.file).join(", ") || "none"}`;
+            newProgress.handoff_notes = transferNote;
+            writeAgentProgress(wsRoot, newProgress);
+
+            // 6. Post handoff note
+            if (fromProgress) {
+                const ts = new Date().toISOString().slice(0, 19);
+                fromProgress.handoff_notes = (fromProgress.handoff_notes || '') + `\n[${ts}] [SYSTEM] ${from_agent_id} reassigned to ${to_agent_id}`;
+                writeAgentProgress(wsRoot, fromProgress);
+            }
+
+            return { toolResult: `Reassigned ${from_agent_id} → ${to_agent_id}`, content: [{ type: "text", text: `Reassigned ${from_agent_id} → ${to_agent_id}. Transferred ${pendingClaims.length} pending file claims.` }] };
+        }
+
+        // === GAP 11: request_scope_expansion ===
+        if (name === "request_scope_expansion") {
+            const { agent_id, file_path, reason } = args as any;
+            if (!agent_id || !file_path || !reason) throw new Error("Missing required arguments");
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            const md = readManifest(wsRoot);
+            const sessionId = extractSessionId(md);
+
+            // Store as an issue with special type
+            let progress = readAgentProgress(wsRoot, agent_id);
+            if (!progress) {
+                progress = createAgentProgress(agent_id, "unknown", "0", sessionId);
+            }
+            progress.issues.push({
+                severity: "🟠 SCOPE_REQUEST",
+                area: file_path,
+                description: `Scope expansion requested: ${reason}`
+            });
+            const ts = new Date().toISOString().slice(0, 19);
+            progress.handoff_notes = (progress.handoff_notes || '') + `\n[${ts}] [SCOPE_REQUEST] ${agent_id} requests access to ${file_path}: ${reason}`;
+            writeAgentProgress(wsRoot, progress);
+
+            return { toolResult: `Scope expansion requested`, content: [{ type: "text", text: `${agent_id} requested scope expansion for ${file_path}. PM/Coordinator will see this in get_swarm_status.` }] };
+        }
+
+        // === GAP 15: check_quota ===
+        if (name === "check_quota") {
+            const quotaPath = path.join(os.homedir(), '.antigravity-configs', 'quota_snapshot.json');
+            try {
+                if (fs.existsSync(quotaPath)) {
+                    const quota = JSON.parse(fs.readFileSync(quotaPath, 'utf8'));
+                    return { toolResult: JSON.stringify(quota), content: [{ type: "text", text: JSON.stringify(quota, null, 2) }] };
+                }
+                return { toolResult: "(No quota snapshot found)", content: [{ type: "text", text: "No quota_snapshot.json found. Run quota_check.ps1 or .sh first." }] };
+            } catch (e: any) {
+                return { toolResult: `Quota check failed: ${e.message}`, content: [{ type: "text", text: `Error reading quota: ${e.message}` }] };
+            }
+        }
+
+        // === GAP 16: advance_phase ===
+        if (name === "advance_phase") {
+            const { from_phase, to_phase } = args as any;
+            if (!from_phase || !to_phase) throw new Error("Missing required arguments");
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            let md = readManifest(wsRoot);
+            const sessionId = extractSessionId(md);
+
+            // 1. Validate from_phase gate
+            const allProgress = readAllAgentProgress(wsRoot, sessionId);
+            const agentsTable = getTableFromSection(md, "Agents");
+            const fromPhaseAgents = (agentsTable?.rows || []).filter(r => r["Phase"]?.trim() === from_phase);
+            const terminal = ["Complete", "Done", "Failed"];
+            const allDone = fromPhaseAgents.every(r => {
+                const ap = allProgress.find(a => a.agent_id === r["ID"]);
+                const status = ap ? ap.status : r["Status"];
+                return terminal.some(t => status?.includes(t));
+            });
+
+            if (!allDone) {
+                const pending = fromPhaseAgents.filter(r => {
+                    const ap = allProgress.find(a => a.agent_id === r["ID"]);
+                    const status = ap ? ap.status : r["Status"];
+                    return !terminal.some(t => status?.includes(t));
+                }).map(r => r["ID"]);
+                throw new Error(`Phase ${from_phase} not complete. Pending agents: ${pending.join(", ")}`);
+            }
+
+            // 2. Rollup progress
+            if (agentsTable) {
+                for (const ap of allProgress) {
+                    const row = agentsTable.rows.find(r => r["ID"] === ap.agent_id);
+                    if (row) row["Status"] = ap.status;
+                }
+                const u = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+                if (u) md = u;
+            }
+
+            // 3. Auto-check phase gate
+            const gateRegex = new RegExp(`(- \\[)( )(\\]\\s*Phase ${from_phase}\\b)`, 'i');
+            md = md.replace(gateRegex, '$1x$3');
+            writeManifest(wsRoot, md);
+
+            // 4. Update registry
+            try { updateSwarmRegistry(wsRoot, { phase: to_phase }); } catch { /* non-fatal */ }
+
+            // 5. Return Phase 2 agents
+            const nextPhaseAgents = (agentsTable?.rows || []).filter(r => r["Phase"]?.trim() === to_phase);
+            writeSwarmStatus(wsRoot, md, `Phase ${from_phase} → ${to_phase}`);
+
+            return { toolResult: `Advanced to phase ${to_phase}`, content: [{ type: "text", text: `Phase ${from_phase} complete ✅. Advanced to Phase ${to_phase}. Next agents: ${nextPhaseAgents.map(a => `${a["ID"]} (${a["Role"]})`).join(", ") || "none"}` }] };
+        }
+
+        // === GAP 17: complete_swarm ===
+        if (name === "complete_swarm") {
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            let md = readManifest(wsRoot);
+            const sessionId = extractSessionId(md);
+
+            // 1. Final rollup
+            const allProgress = readAllAgentProgress(wsRoot, sessionId);
+            const agentsTable = getTableFromSection(md, "Agents");
+            if (agentsTable) {
+                for (const ap of allProgress) {
+                    const row = agentsTable.rows.find(r => r["ID"] === ap.agent_id);
+                    if (row) row["Status"] = ap.status;
+                }
+                const u = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
+                if (u) md = u;
+            }
+            writeManifest(wsRoot, md);
+
+            // 2. Archive manifest
+            const archiveDir = path.join(wsRoot, '.swarm-archives');
+            if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
+            const archiveName = `swarm-manifest-${sessionId.replace(/[:.]/g, '-')}.md`;
+            fs.copyFileSync(path.join(wsRoot, 'swarm-manifest.md'), path.join(archiveDir, archiveName));
+
+            // 3. Clean up agent files
+            const cleaned = cleanupAgentFiles(wsRoot);
+
+            // 4. Clean up events
+            try { cleanupEvents(wsRoot, sessionId); } catch { /* non-fatal */ }
+
+            // 5. Deregister from swarm registry
+            try { deregisterSwarm(wsRoot); } catch { /* non-fatal */ }
+
+            // 6. Write final status
+            writeSwarmStatus(wsRoot, md, "Swarm completed");
+
+            const totalAgents = agentsTable?.rows.length || 0;
+            const completedAgents = allProgress.filter(a => a.status?.includes("Complete") || a.status?.includes("Done")).length;
+            const failedAgents = allProgress.filter(a => a.status?.includes("Failed")).length;
+
+            return { toolResult: "Swarm completed", content: [{ type: "text", text: `Swarm completed. ${completedAgents}/${totalAgents} agents succeeded, ${failedAgents} failed. Archived to ${archiveName}. Cleaned ${cleaned} agent files.` }] };
+        }
+
+        // === GAP 4: get_my_assignment ===
+        if (name === "get_my_assignment") {
+            const { agent_id } = args as any;
+            if (!agent_id) throw new Error("Missing required argument: agent_id");
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            const md = readManifest(wsRoot);
+
+            const agentsTable = getTableFromSection(md, "Agents");
+            if (!agentsTable) throw new Error("No Agents table in manifest");
+            const row = agentsTable.rows.find(r => r["ID"] === agent_id);
+            if (!row) throw new Error(`Agent ${agent_id} not found in manifest`);
+
+            return { toolResult: JSON.stringify(row), content: [{ type: "text", text: JSON.stringify(row, null, 2) }] };
+        }
+
+        // === GAP 6: get_agent_progress ===
+        if (name === "get_agent_progress") {
+            const { agent_id } = args as any;
+            if (!agent_id) throw new Error("Missing required argument: agent_id");
+            const wsRoot = resolveWorkspaceRoot(args as any);
+
+            const progress = readAgentProgress(wsRoot, agent_id);
+            if (!progress) throw new Error(`No progress file found for agent ${agent_id}`);
+
+            return { toolResult: JSON.stringify(progress), content: [{ type: "text", text: JSON.stringify(progress, null, 2) }] };
+        }
+
+        // === GAP 18: update_phase_gate ===
+        if (name === "update_phase_gate") {
+            const { phase_number, complete } = args as any;
+            if (phase_number === undefined || complete === undefined) throw new Error("Missing required arguments");
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            let md = readManifest(wsRoot);
+
+            const checkChar = complete ? 'x' : ' ';
+            const uncheckedRegex = new RegExp(`(- \\[)[ x](\\]\\s*Phase ${phase_number}\\b)`, 'i');
+            const newMd = md.replace(uncheckedRegex, `$1${checkChar}$2`);
+
+            if (newMd === md) throw new Error(`Phase gate ${phase_number} not found in manifest`);
+            writeManifest(wsRoot, newMd);
+            writeSwarmStatus(wsRoot, newMd, `Phase gate ${phase_number} ${complete ? 'checked' : 'unchecked'}`);
+
+            return { toolResult: `Phase gate ${phase_number} updated`, content: [{ type: "text", text: `Phase gate ${phase_number} ${complete ? '✅ checked' : '⬜ unchecked'}` }] };
         }
 
         throw new Error(`Unknown tool: ${name}`);

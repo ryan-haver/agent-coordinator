@@ -22,6 +22,7 @@ export interface AgentProgress {
     agent_id: string;
     role: string;
     status: string;
+    detail: string;
     phase: string;
     file_claims: AgentFileClaim[];
     issues: AgentIssue[];
@@ -69,6 +70,7 @@ export function createAgentProgress(agentId: string, role: string, phase: string
         agent_id: agentId,
         role,
         status: '⏳ Pending',
+        detail: '',
         phase,
         file_claims: [],
         issues: [],
