@@ -48,7 +48,8 @@ Sourced from [Antigravity Cockpit](https://github.com/jlcodes99/vscode-antigravi
 | **1B** | MCP Coordination Server | ✅ Complete | Programmatic manifest management via MCP tools |
 | **1C** | Enhanced Operations | ✅ Complete | Supervision, autonomy, presets |
 | **2A** | NotebookLM Integration | ✅ Complete | Research & persistent knowledge |
-| **2B** | Fusebase Integration | ✅ Complete | Artifact storage, project docs, task tracking |
+| **2B** | Fusebase Integration | ✅ Complete | Dual-write deliverables, kanban tracking, tagging |
+| **2C** | Fusebase Agent Accounts | Future | @mentions, comments, human↔agent communication |
 | **3** | Cockpit Quota Awareness | ✅ Complete | Passive quota monitoring |
 | **4** | Direct Quota API | ✅ Complete | Programmatic quota checking |
 | **5** | Advanced Capabilities | Future | Database layer, marketplace, dashboards |
@@ -513,26 +514,36 @@ Aliases:
 
 ---
 
-## Phase 2B: Fusebase Integration — Artifact Storage & Project Documentation
+## Phase 2B: Fusebase Integration — Deliverables, Tracking & Dual-Write
 
-Leverage the [Fusebase MCP](file:///c:/scripts/fusebase-mcp) (46 tools, reverse-engineered API) to give agents a **persistent, structured storage layer** for all project artifacts. While NotebookLM handles research and knowledge queries, Fusebase handles documentation, project management, and deliverable storage.
+Leverage the [Fusebase MCP](file:///c:/scripts/fusebase-mcp) (46 tools, reverse-engineered API) to give agents a **persistent, structured storage layer** for all project artifacts, with a dual-write strategy that keeps agents reliable while giving humans a polished UI.
 
-### Why Fusebase
+### Core Principle: Dual-Write
 
-Right now, swarm artifacts live as local markdown files that are lost when the project moves or branches are cleaned up. Fusebase provides:
+**Fusebase is for human visibility, local files are for agent reliability.**
 
-| Need | Without Fusebase | With Fusebase |
-|------|-----------------|---------------|
-| **Spec document** | `spec.md` in project root | Fusebase page — versioned, shareable, commentable |
-| **Plan/architecture** | `plan.md` disappears with branch | Fusebase page — persistent, linked to spec |
-| **QA results** | Terminal output lost | Fusebase page — timestamped, tagged, searchable |
-| **Progress tracking** | Manifest in repo | Fusebase tasks — kanban board with status |
-| **Test reports** | Scattered files | Fusebase pages — organized in workspace folders |
-| **Cross-project docs** | Hard to find | Fusebase search + tags |
+| Layer | Source of Truth For | Why |
+|-------|-------------------|-----|
+| **Local files** (`spec.md`, `plan.md`, `swarm-docs/`) | Agents | Always available, `grep`-able, no auth, works offline |
+| **Fusebase pages** | Humans | Rich UI, comments, collaboration, persistent across branches |
 
-### Workspace Structure for Agent Swarms
+Agents write to **both** simultaneously. If Fusebase is down, local files keep the swarm running. Once Fusebase MCP is battle-tested (after 10+ swarms), consider inverting the flow — Fusebase as source, local files as generated exports.
 
-Each swarm project gets a folder tree in a dedicated Fusebase workspace:
+### What Lives in Fusebase
+
+| Artifact | Fusebase Type | Who Writes | Dual-Write Local |
+|----------|--------------|------------|-----------------|
+| **Spec** | Page | PM | `spec.md` |
+| **Architecture Plan** | Page | Architect | `plan.md` |
+| **Implementation Notes** | Page per agent | Developer | `swarm-docs/<agent-id>-notes.md` |
+| **Test Results** | Page | QA | `swarm-docs/<agent-id>-test-results.md` |
+| **Code Review** | Page | Code Reviewer | `swarm-docs/<agent-id>-review.md` |
+| **Research Findings** | Page | Researcher | `swarm-docs/<agent-id>-research.md` |
+| **RCA / Debug Log** | Page | Debugger | `swarm-docs/<agent-id>-rca.md` |
+| **Swarm Report** | Page | PM (final) | `swarm-report.md` |
+| **Task Board** | Kanban page | PM + agents | Manifest `## Agents` table |
+
+### Workspace Structure
 
 ```
 Workspace: "Agent Swarm Projects"
@@ -549,34 +560,25 @@ Workspace: "Agent Swarm Projects"
      └─ 📋 Task Board              ← Kanban for all agent tasks
 ```
 
-### Agent-to-Fusebase Capability Mapping
+### Kanban Board Integration
 
-| Agent | Fusebase Actions | What They Store |
-|-------|-----------------|----------------|
-| **Project Manager** | `create_page`, `create_task`, `update_page_tags` | Creates project folder, spec page, task board. Tags with `#swarm`, `#active` |
-| **Architect** | `create_page`, `update_page_content` | Writes architecture plan, design decisions |
-| **Developer** | `create_page`, `update_page_content`, `create_task` | Working notes, implementation decisions, creates subtasks for TODOs |
-| **QA** | `create_page`, `create_task` | Test results, bug reports as tasks, coverage data |
-| **Code Reviewer** | `create_page` | Review findings, security notes, improvement suggestions |
-| **Debugger** | `create_page`, `update_page_content` | Root cause analysis, fix documentation |
-| **DevOps** | `create_page` | Build logs, deployment notes, CI results |
-| **Researcher** | `create_page` | Research summaries (links back to NLM notebook for deep dives) |
-| **Explorer** | `create_page` | Codebase maps, architecture diagrams, pattern catalogs |
-
-### Task Board Integration
-
-The PM creates a Fusebase task board for each swarm. Each agent's work becomes a task:
+The PM creates a Fusebase kanban board on swarm start. Agents update their card at **phase boundaries only** (not on every status change — that would be too noisy):
 
 ```
 📋 Task Board: "Billing Refactor"
 
-| To Do          | In Progress     | Review          | Done            |
-|----------------|-----------------|-----------------|------------------|
-| γ: Payment API |                 |                 | ε: Architecture  |
-|                | β: Gateway impl | δ: Test suite   | α: Spec          |
+| Backlog         | In Progress     | Review          | Done            |
+|-----------------|-----------------|-----------------|-----------------|
+| γ: Payment API  |                 |                 | ε: Architecture |
+|                 | β: Gateway impl | δ: Test suite   | α: Spec         |
 ```
 
-Agents update their task status as they work. The `/status` command reads both the manifest AND the Fusebase task board.
+**Update triggers** (one task-board write per trigger):
+- Agent starts work → moves card to "In Progress"
+- Agent marks `⏸️ Blocked` → moves card to "Blocked" column
+- Agent marks `✅ Complete` → moves card to "Done"
+
+The `/status` command reads both the manifest AND the Fusebase task board for a unified view.
 
 ### Fusebase vs NotebookLM — Complementary Roles
 
@@ -593,8 +595,6 @@ Agents update their task status as they work. The `/status` command reads both t
 
 ### Tagging Convention
 
-All swarm-created pages use consistent tags for searchability:
-
 | Tag | Purpose |
 |-----|---------|
 | `#swarm` | All pages created by a swarm |
@@ -605,19 +605,139 @@ All swarm-created pages use consistent tags for searchability:
 
 ### Deliverables
 
-- Agent prompts updated to write deliverables to Fusebase
+- Dual-write pattern: agents write to both Fusebase and local files
 - PM creates project folder structure and task board on swarm start
-- All agents write their outputs as Fusebase pages (specs, plans, reports, reviews)
-- Task board reflects agent progress in real-time
+- Kanban board updates at phase boundaries
 - Tagging convention for cross-project discovery
-- `/status` command reads Fusebase task board
+- `/status` reads both manifest and Fusebase task board
 - SKILL.md documents Fusebase MCP tool usage
 
+---
+
+## Phase 2C: Fusebase Agent Accounts — Human↔Agent Communication
+
+### The Vision
+
+Give each agent a **Fusebase account** so the user can communicate with agents the same way they'd communicate with human team members — through comments, @mentions, and task assignments.
+
+### Agent Accounts
+
+Create dedicated Fusebase accounts for each agent role:
+
+| Agent Role | Account | Display Name |
+|-----------|---------|-------------|
+| PM | `agent-pm@<domain>` | 🎯 Agent PM |
+| Architect | `agent-architect@<domain>` | 🏗️ Agent Architect |
+| Developer | `agent-dev-β@<domain>` | 💻 Agent β (Dev) |
+| Developer | `agent-dev-γ@<domain>` | 💻 Agent γ (Dev) |
+| QA | `agent-qa@<domain>` | 🧪 Agent QA |
+| Code Reviewer | `agent-review@<domain>` | 🔍 Agent Review |
+| Debugger | `agent-debug@<domain>` | 🐛 Agent Debug |
+| DevOps | `agent-devops@<domain>` | ⚙️ Agent DevOps |
+
+Each agent authenticates as its own account when writing to Fusebase. Comments, edits, and task updates show the agent's identity — making the collaboration log fully attributable.
+
+### Human↔Agent Communication
+
+The user can interact with agents through Fusebase's native collaboration features:
+
+#### User → Agent (comments & @mentions)
+```
+User comments on Architecture Plan page:
+  "@agent-dev-β Can you also handle the currency 
+   conversion in the payment gateway? I think it 
+   belongs in your scope."
+
+Agent β's session:
+  → Polls Fusebase for new comments/mentions
+  → Reads the comment
+  → Calls `request_scope_expansion` if needed
+  → Replies in Fusebase: "Acknowledged — I'll add
+    currency conversion to my scope. Requesting 
+    scope expansion for utils/currency.ts"
+```
+
+#### Agent → User (deliverable review requests)
+```
+Architect writes plan page, then comments:
+  "@user Architecture plan ready for review. Key 
+   decisions: REST over GraphQL, Redis for caching.
+   See Trade-offs section."
+
+User reviews in Fusebase UI:
+  → Reads plan in rich format
+  → Leaves inline comments
+  → @mentions architect with questions
+  → Approves or requests changes
+```
+
+#### Agent → Agent (cross-agent collaboration)
+```
+QA finds a bug, @mentions the developer:
+  "@agent-dev-β Found a null pointer in 
+   PaymentGateway.process(). See issue #3."
+
+Developer β sees mention, investigates, replies:
+  "@agent-qa Fixed in commit abc123. The null check 
+   was missing for optional currency field."
+```
+
+### Notification Polling
+
+Since agents can't receive push notifications, they poll Fusebase for new comments/mentions at key checkpoints:
+
+| Checkpoint | What Agent Does |
+|-----------|----------------|
+| **On start** | Poll for any comments since last agent session |
+| **Before marking complete** | Poll for any last-minute user feedback |
+| **Phase gate wait** | Poll periodically while waiting for approval |
+| **After posting deliverable** | Poll for user review comments |
+
+#### MCP Tool Extension
+
+| Tool | Purpose |
+|------|---------|
+| `fusebase_poll_mentions` | Check for new @mentions for this agent |
+| `fusebase_reply_comment` | Reply to a specific comment thread |
+| `fusebase_post_review_request` | Post a comment requesting user review |
+
+### Configuration
+
+Agent accounts are configured in `model_fallback.json` (or a new `fusebase_accounts.json`):
+
+```json
+{
+  "fusebase_accounts": {
+    "project-manager": {
+      "email": "agent-pm@yourdomain.com",
+      "display_name": "🎯 Agent PM",
+      "auth_token_env": "FUSEBASE_PM_TOKEN"
+    },
+    "developer": {
+      "email": "agent-dev@yourdomain.com",
+      "display_name": "💻 Agent Dev",
+      "auth_token_env": "FUSEBASE_DEV_TOKEN"
+    }
+  }
+}
+```
+
+### Deliverables
+
+- Fusebase account setup guide (one account per agent role)
+- Agent authentication per-account (token-based)
+- Comment polling in agent lifecycle (on start, before complete, at gates)
+- @mention parsing and response
+- Fusebase MCP tools for comment/mention interaction
+- User guide for communicating with agents via Fusebase
+
 ### Open Questions
+
 - Should every swarm write to Fusebase, or only when `--docs` flag is set?
 - How to handle Fusebase auth session expiry during long swarms?
 - Should the Fusebase workspace be per-project or one shared workspace with folder isolation?
-- Which Fusebase pages should be public (shared as portals) vs private?
+- How many concurrent agent accounts does Fusebase support on the current plan?
+- Should agents poll for mentions on a timer, or only at defined checkpoints?
 
 ---
 
