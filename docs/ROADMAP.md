@@ -729,6 +729,82 @@ graph LR
 | **Qdrant** | Long-Term Semantic Memory | RAG, finding code snippets by "meaning" | NotebookLM queries (supplements, doesn't replace) |
 | **TimescaleDB** | Historical Telemetry / Logs | Analyzing agent performance and "Temporal RAG" | `swarm-agent-*.json` progress files, `swarm_events/*.json` |
 
+### Strategic Analysis & Risk Assessment
+
+> [!CAUTION]
+> **Review this section before starting any Phase 5 work.** The analysis below was written on 2026-02-22 after completing the file-based write queue system. It captures genuine concerns about execution risk and recommends an evidence-based approach to avoid over-engineering.
+
+#### What the three databases get right
+
+- **SpacetimeDB** solves a real problem: the file mutex + markdown parsing pipeline is duct tape. Every handler doing `withManifestLock → read → parse tables → modify → serialize → write` is inherently fragile. ACID transactions would reduce each operation from ~30 lines to ~3.
+- **Qdrant** fills a genuine gap: NotebookLM can't do "find me code that does X" across projects. Cross-project pattern retrieval is where the system gets smarter over time.
+- **TimescaleDB's temporal RAG** answers questions ("which model debugs best?") that are impossible today but valuable after 10+ swarms.
+
+#### Concerns
+
+| Concern | Detail |
+|---------|--------|
+| **Zero to three databases** | Current system is a single TS process reading markdown files — zero dependencies, works anywhere. Three databases = Docker, networking, storage, backups, monitoring. Massive operational surface area jump. |
+| **SpacetimeDB maturity** | Genuinely innovative but not battle-tested like Postgres/SQLite. Bugs in the WASM runtime or subscription engine become your debugging problem. |
+| **Qdrant embedding pipeline** | "Chunking + embedding" glosses over real complexity: chunk sizing, code vs prose strategies, keeping embeddings fresh when code changes. Bad pipeline = garbage results, worse than nothing. |
+| **Three failure modes** | Each database going down needs its own graceful degradation path. The file-based fallback must be real, not theoretical. |
+| **NotebookLM may be enough** | For semantic search over project knowledge, NLM + good KIs may already suffice. Need evidence this is insufficient before building a Qdrant alternative. |
+
+#### Recommended Execution Order
+
+> [!IMPORTANT]
+> Don't ship all three simultaneously. Let each prove its value before adding the next.
+
+```
+Phase 5A-pre: SQLite (not SpacetimeDB)
+  → Same zero-infrastructure story as files, but proper ACID
+  → Prove the relational data model works
+  → Eliminate lock files and markdown parsing
+  → Decision: does subscription-based sync justify SpacetimeDB's risk?
+        │
+        ▼
+  ┌──────────────────────────────────────────┐
+  │  🔶 EVALUATION GATE 1                   │
+  │  After 5+ swarms on SQLite:             │
+  │  - Is polling a real bottleneck?         │
+  │  - Do agents need push notifications?   │
+  │  - Is SQLite's concurrency sufficient?  │
+  │  If YES → upgrade to SpacetimeDB        │
+  │  If NO  → stay on SQLite                │
+  └──────────────────────────────────────────┘
+        │
+        ▼
+Phase 5C (before 5B): TimescaleDB
+  → Simplest to implement: just emit events
+  → Low risk, high insight
+  → After 20 swarms: real data on model performance
+        │
+        ▼
+  ┌──────────────────────────────────────────┐
+  │  🔶 EVALUATION GATE 2                   │
+  │  After 20+ swarms with telemetry:       │
+  │  - Is NLM search sufficient for RAG?    │
+  │  - Are agents often searching for code? │
+  │  - Is cross-project retrieval needed?   │
+  │  If YES → implement Qdrant (Phase 5B)   │
+  │  If NO  → skip or defer                 │
+  └──────────────────────────────────────────┘
+        │
+        ▼
+Phase 5B: Qdrant (only if evidence supports it)
+  → Vector search across code, docs, KIs
+  → Investment justified by telemetry data
+```
+
+#### Alternatives Considered
+
+| Option | Pros | Cons | Verdict |
+|--------|------|------|---------|
+| **SQLite instead of SpacetimeDB** | Zero-dep, battle-tested, same file story | No subscriptions, no server-side logic | Start here, upgrade later if needed |
+| **Turso (libSQL)** | SQLite-compatible, edge replication | Another dependency to manage | Consider if multi-machine swarms needed |
+| **Postgres instead of TimescaleDB** | More common, simpler | No hypertables, no continuous aggregates | TimescaleDB is Postgres with time-series extensions — low incremental risk |
+| **LanceDB instead of Qdrant** | Embedded, no server, Rust-native | Newer, smaller ecosystem | Worth evaluating alongside Qdrant |
+
 ---
 
 ### Phase 5A: SpacetimeDB — Working Memory & Real-Time Sync
