@@ -148,3 +148,27 @@ export function cleanupEvents(workspace: string, sessionId: string): void {
     const fp = eventsFilePath(workspace, sessionId);
     try { if (fs.existsSync(fp)) fs.unlinkSync(fp); } catch { /* non-fatal */ }
 }
+
+/**
+ * Remove event files older than maxAgeDays (default: 7).
+ * Prevents orphaned events from accumulating when swarms are abandoned.
+ */
+export function cleanupStaleEvents(maxAgeDays: number = 7): number {
+    let count = 0;
+    try {
+        if (!fs.existsSync(EVENTS_DIR)) return 0;
+        const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+        const files = fs.readdirSync(EVENTS_DIR).filter(f => f.startsWith('events-') && f.endsWith('.json'));
+        for (const f of files) {
+            try {
+                const fp = path.join(EVENTS_DIR, f);
+                const stat = fs.statSync(fp);
+                if (stat.mtimeMs < cutoff) {
+                    fs.unlinkSync(fp);
+                    count++;
+                }
+            } catch { /* skip files we can't stat/delete */ }
+        }
+    } catch { /* non-fatal */ }
+    return count;
+}

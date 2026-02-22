@@ -34,7 +34,8 @@ import {
     listActiveSwarms,
     broadcastEvent,
     getEvents,
-    cleanupEvents
+    cleanupEvents,
+    cleanupStaleEvents
 } from "./utils/swarm-registry.js";
 
 // Read version from package.json at startup
@@ -633,12 +634,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             // Clean up agent files from previous swarms
             const cleaned = cleanupAgentFiles(wsRoot);
 
+            // Housekeeping: remove stale event files older than 7 days
+            try { cleanupStaleEvents(7); } catch { /* non-fatal */ }
+
             writeManifest(wsRoot, content);
             writeSwarmStatus(wsRoot, content, "Swarm initialized");
 
             // Register in global swarm registry
             try {
-                registerSwarm({
+                await registerSwarm({
                     workspace: wsRoot,
                     session_id: sessionId,
                     mission: mission.substring(0, 200),
@@ -1133,21 +1137,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     if (u) md = u;
                 }
 
-                // 4. Merge handoff notes
-                for (const ap of allProgress) {
-                    if (ap.handoff_notes?.trim()) {
-                        const notes = ap.handoff_notes.split('\n').filter(l => l.trim());
-                        for (const note of notes) {
-                            if (!md.includes(note)) {
-                                const handoffIdx = md.indexOf('## Handoff Notes');
-                                if (handoffIdx !== -1) {
-                                    let insertIdx = md.indexOf('\n', handoffIdx);
-                                    if (insertIdx === -1) insertIdx = md.length;
-                                    else insertIdx++;
-                                    const rest = md.slice(insertIdx);
+                // 4. Merge handoff notes (exact-line dedup to avoid substring false matches)
+                const handoffIdx = md.indexOf('## Handoff Notes');
+                if (handoffIdx !== -1) {
+                    // Extract existing notes as a Set of trimmed lines for O(1) lookup
+                    const existingNotesMatch = md.slice(handoffIdx).match(/## Handoff Notes\s*\n(?:<!--[\s\S]*?-->\s*\n)?([\s\S]*?)(?:\n## |$)/);
+                    const existingLines = new Set(
+                        (existingNotesMatch?.[1] || '').split('\n').map(l => l.trim()).filter(Boolean)
+                    );
+
+                    for (const ap of allProgress) {
+                        if (ap.handoff_notes?.trim()) {
+                            const notes = ap.handoff_notes.split('\n').filter(l => l.trim());
+                            for (const note of notes) {
+                                if (!existingLines.has(note.trim())) {
+                                    existingLines.add(note.trim());
+                                    let insertPos = md.indexOf('\n', handoffIdx);
+                                    if (insertPos === -1) insertPos = md.length;
+                                    else insertPos++;
+                                    const rest = md.slice(insertPos);
                                     const commentMatch = rest.match(/^<!--[\s\S]*?-->\s*\n/);
-                                    if (commentMatch) insertIdx += commentMatch[0].length;
-                                    md = md.slice(0, insertIdx) + note + '\n' + md.slice(insertIdx);
+                                    if (commentMatch) insertPos += commentMatch[0].length;
+                                    md = md.slice(0, insertPos) + note + '\n' + md.slice(insertPos);
                                 }
                             }
                         }
@@ -1269,14 +1280,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const md = readManifest(wsRoot);
             const sessionId = extractSessionId(md);
 
-            broadcastEvent({
-                timestamp: new Date().toISOString(),
-                agent_id,
-                event_type,
-                message,
-                workspace: wsRoot,
-                session_id: sessionId
-            }).catch(() => { /* non-fatal */ });
+            try {
+                await broadcastEvent({
+                    timestamp: new Date().toISOString(),
+                    agent_id,
+                    event_type,
+                    message,
+                    workspace: wsRoot,
+                    session_id: sessionId
+                });
+            } catch { /* event write is non-fatal */ }
 
             // Also post as handoff note for persistence
             const timestamp = new Date().toISOString().slice(0, 19);
@@ -1431,13 +1444,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             if (!from_phase || !to_phase) throw new Error("Missing required arguments");
             const wsRoot = resolveWorkspaceRoot(args as any);
 
-            // Read agent progress outside lock
-            const mdForSession = readManifest(wsRoot);
-            const sessionId = extractSessionId(mdForSession);
-            const allProgress = readAllAgentProgress(wsRoot, sessionId);
-
             // Lock manifest for validation + rollup + gate check
+            // Agent progress is read INSIDE the lock to ensure consistency
             const advanceResult = await withManifestLock(wsRoot, (md) => {
+                const sessionId = extractSessionId(md);
+                const allProgress = readAllAgentProgress(wsRoot, sessionId);
+
                 const agentsTable = getTableFromSection(md, "Agents");
                 const fromPhaseAgents = (agentsTable?.rows || []).filter(r => r["Phase"]?.trim() === from_phase);
                 const terminal = ["Complete", "Done", "Failed"];
@@ -1477,6 +1489,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     return st?.includes("Failed");
                 }).length;
 
+                // Write status while we still hold the lock
+                writeSwarmStatus(wsRoot, md, `Phase ${from_phase} → ${to_phase}`);
+
                 return {
                     content: md,
                     result: { nextPhaseAgents, failedInPhase }
@@ -1484,7 +1499,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             });
 
             try { await updateSwarmRegistry(wsRoot, { phase: to_phase }); } catch { /* non-fatal */ }
-            writeSwarmStatus(wsRoot, readManifest(wsRoot), `Phase ${from_phase} → ${to_phase}`);
 
             return { toolResult: `Advanced to phase ${to_phase}`, content: [{ type: "text", text: `Phase ${from_phase} complete ✅${advanceResult.failedInPhase > 0 ? ` (⚠️ ${advanceResult.failedInPhase} agent(s) failed)` : ''}. Advanced to Phase ${to_phase}. Next agents: ${advanceResult.nextPhaseAgents.map(a => `${a["ID"]} (${a["Role"]})`).join(", ") || "none"}` }] };
         }
@@ -1493,50 +1507,39 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (name === "complete_swarm") {
             const wsRoot = resolveWorkspaceRoot(args as any);
 
-            // Read session info outside lock
-            const mdForSession = readManifest(wsRoot);
-            const sessionId = extractSessionId(mdForSession);
-            const allProgress = readAllAgentProgress(wsRoot, sessionId);
-
-            // 1. Final rollup (locked)
-            await withManifestLock(wsRoot, (md) => {
+            // 1. Final rollup (locked) — read progress and manifest atomically
+            const { sessionId, allProgress } = await withManifestLock(wsRoot, (md) => {
+                const sid = extractSessionId(md);
+                const progress = readAllAgentProgress(wsRoot, sid);
                 const agentsTable = getTableFromSection(md, "Agents");
                 if (agentsTable) {
-                    for (const ap of allProgress) {
+                    for (const ap of progress) {
                         const row = agentsTable.rows.find(r => r["ID"] === ap.agent_id);
                         if (row) row["Status"] = ap.status;
                     }
                     const u = replaceTableInSection(md, "Agents", serializeTableToString(agentsTable.headers, agentsTable.rows));
                     if (u) md = u;
                 }
-                return { content: md, result: null };
+                return { content: md, result: { sessionId: sid, allProgress: progress } };
             });
 
-            // 2. Archive manifest (read final version)
+            // 2. Read final manifest version (after rollup) and extract stats
             const md = readManifest(wsRoot);
-            const archiveDir = path.join(wsRoot, '.swarm-archives');
-            if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
-            const archiveName = `swarm-manifest-${sessionId.replace(/[:.]/g, '-')}.md`;
-            fs.copyFileSync(path.join(wsRoot, 'swarm-manifest.md'), path.join(archiveDir, archiveName));
-
-            // 3. Clean up agent files
-            const cleaned = cleanupAgentFiles(wsRoot);
-
-            // 4. Clean up events
-            try { cleanupEvents(wsRoot, sessionId); } catch { /* non-fatal */ }
-
-            // 5. Deregister from swarm registry
-            try { await deregisterSwarm(wsRoot); } catch { /* non-fatal */ }
-
-            // 6. Write final status
-            writeSwarmStatus(wsRoot, md, "Swarm completed");
-
             const agentsTable = getTableFromSection(md, "Agents");
             const totalAgents = agentsTable?.rows.length || 0;
             const completedAgents = allProgress.filter(a => a.status?.includes("Complete") || a.status?.includes("Done")).length;
             const failedAgents = allProgress.filter(a => a.status?.includes("Failed")).length;
 
-            // Gap 23: Generate swarm-report.md
+            // 3. Archive manifest
+            const archiveDir = path.join(wsRoot, '.swarm-archives');
+            if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
+            const archiveName = `swarm-manifest-${sessionId.replace(/[:.]/g, '-')}.md`;
+            fs.copyFileSync(path.join(wsRoot, 'swarm-manifest.md'), path.join(archiveDir, archiveName));
+
+            // 4. Write final status before cleanup (uses manifest data we still have)
+            writeSwarmStatus(wsRoot, md, "Swarm completed");
+
+            // 5. Generate swarm-report.md (before cleaning agent files)
             try {
                 const missionMatch = md.match(/## Mission\s*\n+([\s\S]*?)(?:\n## |$)/);
                 const mission = missionMatch ? missionMatch[1].trim().slice(0, 200) : 'Unknown';
@@ -1572,6 +1575,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 ].join('\n');
                 fs.writeFileSync(path.join(wsRoot, 'swarm-report.md'), report, 'utf8');
             } catch { /* report generation is non-fatal */ }
+
+            // 6. Clean up agent files (after report generation)
+            const cleaned = cleanupAgentFiles(wsRoot);
+
+            // 7. Clean up events
+            try { cleanupEvents(wsRoot, sessionId); } catch { /* non-fatal */ }
+
+            // 8. Deregister from swarm registry
+            try { await deregisterSwarm(wsRoot); } catch { /* non-fatal */ }
 
             return { toolResult: "Swarm completed", content: [{ type: "text", text: `Swarm completed. ${completedAgents}/${totalAgents} agents succeeded, ${failedAgents} failed. Archived to ${archiveName}. Report: swarm-report.md. Cleaned ${cleaned} agent files.` }] };
         }
