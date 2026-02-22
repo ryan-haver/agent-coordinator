@@ -13,6 +13,7 @@ swarm-manifest.md.bak
 swarm-docs/
 .claim-lock-*
 .swarm-archives/
+swarm-report.md
 
 # Consultation artifacts
 consult_request.md

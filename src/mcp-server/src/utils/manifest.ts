@@ -101,7 +101,7 @@ export function serializeTableToString(headers: string[], rows: TableRow[]): str
     res += '|' + headers.map(() => '---').join('|') + '|\n';
 
     for (const row of rows) {
-        const rowCells = headers.map(h => row[h] || '');
+        const rowCells = headers.map(h => (row[h] || '').replace(/\|/g, '\\|'));
         res += '| ' + rowCells.join(' | ') + ' |\n';
     }
 

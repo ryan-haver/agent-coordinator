@@ -337,6 +337,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                     type: "object",
                     properties: {
                         phase_number: { type: "string", description: "Phase number to check" },
+                        stale_threshold_minutes: { type: "number", description: "Optional: flag agents inactive for this many minutes as stale" },
                         workspace_root: { type: "string", description: "Optional workspace root override" }
                     },
                     required: ["phase_number"]
@@ -738,7 +739,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     const normalizedFile = file_path.replace(/\\/g, '/');
                     const normalizedScope = scope.replace(/\\/g, '/');
                     const scopeParts = normalizedScope.split(',').map((s: string) => s.trim());
-                    const inScope = scopeParts.some((s: string) => normalizedFile.startsWith(s) || normalizedFile.includes(s) || s === '*' || s === 'all');
+                    const inScope = scopeParts.some((s: string) => normalizedFile.startsWith(s) || s === '*' || s === 'all');
                     if (!inScope) {
                         throw new Error(`File ${file_path} is outside agent ${agent_id}'s scope (${scope}). Use request_scope_expansion to request access.`);
                     }
@@ -792,8 +793,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const claims: Array<{ agent_id: string; file: string; status: string; source: string }> = [];
 
             // 1. Check agent progress files (most up-to-date, session-scoped)
-            const mdForCheck = readManifest(wsRoot);
-            const sessionIdForCheck = extractSessionId(mdForCheck);
+            const md = readManifest(wsRoot);
+            const sessionIdForCheck = extractSessionId(md);
             const allProgress = readAllAgentProgress(wsRoot, sessionIdForCheck);
             for (const ap of allProgress) {
                 for (const c of ap.file_claims) {
@@ -805,7 +806,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             // 2. Fallback: check manifest (for pre-P2 data)
             try {
-                const md = readManifest(wsRoot);
                 const res = getTableFromSection(md, "File Claims");
                 if (res) {
                     const manifestClaims = res.rows.filter(r => r["File"] === file_path);
@@ -941,11 +941,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 if (notesMatch && notesMatch[1].trim()) {
                     notes.push(...notesMatch[1].trim().split('\n').filter(l => l.trim()));
                 }
-            } catch { /* manifest may not exist */ }
 
-            // 2. Read from agent progress files
-            try {
-                const md = readManifest(wsRoot);
+                // 2. Read from agent progress files (reuse manifest already read above)
                 const sessionId = extractSessionId(md);
                 const allProgress = readAllAgentProgress(wsRoot, sessionId);
                 for (const ap of allProgress) {
@@ -1014,11 +1011,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             // Gap 22: Collect pending scope expansion requests
             const scopeRequests = agentFiles.flatMap(ap =>
-                ap.issues.filter(i => i.severity?.includes('SCOPE_REQUEST')).map(i => ({
+                ap.issues.filter(i => i.severity?.includes('SCOPE_REQUEST') || i.severity?.includes('SCOPE_GRANTED') || i.severity?.includes('SCOPE_DENIED')).map(i => ({
                     agent_id: ap.agent_id,
                     file_path: i.area,
-                    reason: i.description?.replace('Scope expansion requested: ', ''),
-                    status: 'pending'
+                    reason: i.description?.replace('Scope expansion requested: ', '').replace(/\s*\[DENIED:.*\]$/, ''),
+                    status: i.severity?.includes('GRANTED') ? 'granted' : i.severity?.includes('DENIED') ? 'denied' : 'pending'
                 }))
             );
 
@@ -1089,7 +1086,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const sessionId = extractSessionId(md);
             const allProgress = readAllAgentProgress(wsRoot, sessionId);
             if (allProgress.length === 0) {
-                return { content: [{ type: "text", text: "No agent progress files found." }] };
+                return { toolResult: "No agent progress files found.", content: [{ type: "text", text: "No agent progress files found." }] };
             }
 
             // 1. Update Agents table with statuses from progress files
@@ -1331,9 +1328,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             const table = getTableFromSection(md, section);
             if (table) {
-                // Replace existing table
-                table.rows = rows;
-                const updated = replaceTableInSection(md, section, serializeTableToString(table.headers, rows));
+                // Replace existing table — use incoming row keys as headers if available
+                const headers = rows.length > 0 ? Object.keys(rows[0]) : table.headers;
+                const updated = replaceTableInSection(md, section, serializeTableToString(headers, rows));
                 if (updated) {
                     writeManifest(wsRoot, updated);
                     return { toolResult: `Section ${section} updated`, content: [{ type: "text", text: `Updated ${section} with ${rows.length} rows` }] };
@@ -1499,7 +1496,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const nextPhaseAgents = (agentsTable?.rows || []).filter(r => r["Phase"]?.trim() === to_phase);
             writeSwarmStatus(wsRoot, md, `Phase ${from_phase} → ${to_phase}`);
 
-            return { toolResult: `Advanced to phase ${to_phase}`, content: [{ type: "text", text: `Phase ${from_phase} complete ✅. Advanced to Phase ${to_phase}. Next agents: ${nextPhaseAgents.map(a => `${a["ID"]} (${a["Role"]})`).join(", ") || "none"}` }] };
+            const failedInPhase = fromPhaseAgents.filter(r => {
+                const ap2 = allProgress.find(a => a.agent_id === r["ID"]);
+                const st = ap2 ? ap2.status : r["Status"];
+                return st?.includes("Failed");
+            }).length;
+
+            return { toolResult: `Advanced to phase ${to_phase}`, content: [{ type: "text", text: `Phase ${from_phase} complete ✅${failedInPhase > 0 ? ` (⚠️ ${failedInPhase} agent(s) failed)` : ''}. Advanced to Phase ${to_phase}. Next agents: ${nextPhaseAgents.map(a => `${a["ID"]} (${a["Role"]})`).join(", ") || "none"}` }] };
         }
 
         // === GAP 17: complete_swarm ===
