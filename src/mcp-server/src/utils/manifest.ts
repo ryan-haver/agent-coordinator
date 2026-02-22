@@ -167,7 +167,12 @@ export function replaceTableInSection(markdown: string, sectionHeading: string, 
     // If not EOF, we need to re-insert the next heading prefix that was part of the lookahead
     const nextHeadingPrefix = isEOF ? '' : sectionMatch[0].substring(sectionContent.length);
 
-    return beforeSection + newSectionContent + nextHeadingPrefix + afterSection;
+    let result = beforeSection + newSectionContent + nextHeadingPrefix + afterSection;
+    // Restore original line endings if the input had CRLF
+    if (markdown.includes('\r\n')) {
+        result = result.replace(/\n/g, '\r\n');
+    }
+    return result;
 }
 
 /**

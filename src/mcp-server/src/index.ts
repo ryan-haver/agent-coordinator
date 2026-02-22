@@ -280,7 +280,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                         role: { type: "string", description: "Agent role file name without .md (e.g. 'developer', 'qa')" },
                         mission: { type: "string" },
                         scope: { type: "string" },
-                        agent_id: { type: "string" }
+                        agent_id: { type: "string" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
                     },
                     required: ["role", "mission", "scope", "agent_id"]
                 }
@@ -330,6 +331,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                     properties: {
                         workspace_root: { type: "string", description: "Optional workspace root override" }
                     }
+                }
+            },
+            {
+                name: "post_handoff_note",
+                description: "Post a note visible to all agents for inter-agent communication (e.g., API changed, dependency added, important context)",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        agent_id: { type: "string", description: "The agent posting the note" },
+                        note: { type: "string", description: "The note content" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    },
+                    required: ["agent_id", "note"]
                 }
             }
         ]
@@ -438,30 +452,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             if (!agent_id || !file_path) throw new Error("Missing required arguments: agent_id, file_path");
             const wsRoot = resolveWorkspaceRoot(args as any);
 
-            // Check all agent files for existing active claims (session-scoped)
-            const md = readManifest(wsRoot);
-            const sessionIdForClaims = extractSessionId(md);
-            const allProgress = readAllAgentProgress(wsRoot, sessionIdForClaims);
-            for (const ap of allProgress) {
-                const activeClaim = ap.file_claims.find(c => c.file === file_path && !c.status.includes("Done") && !c.status.includes("Abandoned"));
-                if (activeClaim) {
-                    throw new Error(`File ${file_path} is currently claimed by agent ${ap.agent_id} with status ${activeClaim.status}`);
-                }
+            // Atomic claim: use lock file to prevent TOCTOU race
+            const lockFileName = `.claim-lock-${file_path.replace(/[\/\\:]/g, '_')}`;
+            const lockFilePath = path.join(wsRoot, lockFileName);
+            try {
+                fs.writeFileSync(lockFilePath, agent_id, { flag: 'wx' });
+            } catch {
+                throw new Error(`File ${file_path} is being claimed by another agent (lock exists)`);
             }
 
-            // Write claim to agent's own progress file
-            let progress = readAgentProgress(wsRoot, agent_id);
-            if (!progress) {
+            try {
+                // Check all agent files for existing active claims (session-scoped)
                 const md = readManifest(wsRoot);
-                const sessionId = extractSessionId(md);
-                const res = getTableFromSection(md, "Agents");
-                const row = res?.rows.find(r => r["ID"] === agent_id);
-                progress = createAgentProgress(agent_id, row?.["Role"] || "unknown", row?.["Phase"] || "1", sessionId);
-            }
-            progress.file_claims.push({ file: file_path, status: "🔄 Active" });
-            writeAgentProgress(wsRoot, progress);
+                const sessionIdForClaims = extractSessionId(md);
+                const allProgress = readAllAgentProgress(wsRoot, sessionIdForClaims);
+                for (const ap of allProgress) {
+                    const activeClaim = ap.file_claims.find(c => c.file === file_path && !c.status.includes("Done") && !c.status.includes("Abandoned"));
+                    if (activeClaim) {
+                        throw new Error(`File ${file_path} is currently claimed by agent ${ap.agent_id} with status ${activeClaim.status}`);
+                    }
+                }
 
-            return { toolResult: `File ${file_path} claimed by ${agent_id}`, content: [{ type: "text", text: `File ${file_path} claimed by ${agent_id} (written to agent progress file)` }] };
+                // Write claim to agent's own progress file
+                let progress = readAgentProgress(wsRoot, agent_id);
+                if (!progress) {
+                    const sessionId = extractSessionId(md);
+                    const res = getTableFromSection(md, "Agents");
+                    const row = res?.rows.find(r => r["ID"] === agent_id);
+                    progress = createAgentProgress(agent_id, row?.["Role"] || "unknown", row?.["Phase"] || "1", sessionId);
+                }
+                progress.file_claims.push({ file: file_path, status: "🔄 Active" });
+                writeAgentProgress(wsRoot, progress);
+
+                return { toolResult: `File ${file_path} claimed by ${agent_id}`, content: [{ type: "text", text: `File ${file_path} claimed by ${agent_id} (written to agent progress file)` }] };
+            } finally {
+                try { fs.unlinkSync(lockFilePath); } catch { /* lock already removed */ }
+            }
         }
 
         if (name === "check_file_claim") {
@@ -539,6 +565,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             prompt = prompt.split("$MISSION").join(mission);
             prompt = prompt.split("$SCOPE").join(scope);
             prompt = prompt.split("$AGENT_ID").join(agent_id);
+            prompt = prompt.split("$WORKSPACE_ROOT").join(resolveWorkspaceRoot(args as any));
 
             return { toolResult: prompt, content: [{ type: "text", text: prompt }] };
         }
@@ -564,6 +591,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             writeAgentProgress(wsRoot, progress);
 
             return { toolResult: `Issue reported: ${description}`, content: [{ type: "text", text: `Issue reported: ${description} (written to agent progress file)` }] };
+        }
+
+        if (name === "post_handoff_note") {
+            const agent_id = (args as any)?.agent_id;
+            const note = (args as any)?.note;
+            if (!agent_id || !note) throw new Error("Missing required arguments: agent_id, note");
+            const wsRoot = resolveWorkspaceRoot(args as any);
+
+            // Write to agent's own progress file
+            let progress = readAgentProgress(wsRoot, agent_id);
+            if (!progress) {
+                const md = readManifest(wsRoot);
+                const sessionId = extractSessionId(md);
+                const res = getTableFromSection(md, "Agents");
+                const row = res?.rows.find(r => r["ID"] === agent_id);
+                progress = createAgentProgress(agent_id, row?.["Role"] || "unknown", row?.["Phase"] || "1", sessionId);
+            }
+            const timestamp = new Date().toISOString().slice(0, 19);
+            const formattedNote = `[${timestamp}] ${agent_id}: ${note}`;
+            progress.handoff_notes = progress.handoff_notes
+                ? progress.handoff_notes + '\n' + formattedNote
+                : formattedNote;
+            writeAgentProgress(wsRoot, progress);
+
+            // Also append to manifest ## Handoff Notes section
+            try {
+                let md = readManifest(wsRoot);
+                const handoffMatch = md.match(/(## Handoff Notes\s*\n(?:<!-- .*?-->\s*\n)?)/);
+                if (handoffMatch) {
+                    const insertPoint = handoffMatch.index! + handoffMatch[0].length;
+                    md = md.slice(0, insertPoint) + formattedNote + '\n' + md.slice(insertPoint);
+                    writeManifest(wsRoot, md);
+                }
+            } catch { /* manifest write failure is non-fatal */ }
+
+            return { toolResult: `Note posted by ${agent_id}`, content: [{ type: "text", text: `Note posted: ${formattedNote}` }] };
         }
 
         if (name === "get_swarm_status") {
@@ -616,13 +679,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const allProgress = readAllAgentProgress(wsRoot, sessionId);
             const phaseAgents = allProgress.filter(a => a.phase === String(phaseNum).trim());
 
+            // Cross-reference manifest to know how many agents are expected
+            const agentsTable = getTableFromSection(md, "Agents");
+            const expectedInPhase = (agentsTable?.rows || [])
+                .filter(r => r["Phase"]?.trim() === String(phaseNum).trim());
+            const agentsNotStarted = expectedInPhase
+                .filter(e => !phaseAgents.some(a => a.agent_id === e["ID"]))
+                .map(e => e["ID"]);
+
             const terminal = ["Complete", "Done", "Blocked", "Failed"];
-            const allDone = phaseAgents.length > 0 &&
+            const allDone = expectedInPhase.length > 0 &&
+                agentsNotStarted.length === 0 &&
                 phaseAgents.every(a => terminal.some(t => a.status?.includes(t)));
 
             const result = {
                 all_complete: allDone,
                 total_agents: phaseAgents.length,
+                expected_agents: expectedInPhase.length,
+                agents_not_started: agentsNotStarted,
                 agents: phaseAgents.map(a => ({
                     id: a.agent_id,
                     role: a.role,

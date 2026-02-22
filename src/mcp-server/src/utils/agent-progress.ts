@@ -111,7 +111,7 @@ export function cleanupAgentFiles(workspaceRoot: string): number {
     let count = 0;
     try {
         const files = fs.readdirSync(workspaceRoot)
-            .filter(f => f.startsWith(AGENT_FILE_PREFIX) && f.endsWith(AGENT_FILE_SUFFIX));
+            .filter(f => (f.startsWith(AGENT_FILE_PREFIX) && f.endsWith(AGENT_FILE_SUFFIX)) || f.startsWith('.claim-lock-'));
         for (const f of files) {
             try {
                 fs.unlinkSync(path.join(workspaceRoot, f));

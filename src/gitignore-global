@@ -11,6 +11,7 @@ swarm_status.json
 swarm-agent-*.json
 swarm-manifest.md.bak
 swarm-docs/
+.claim-lock-*
 
 # Consultation artifacts
 consult_request.md
