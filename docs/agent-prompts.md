@@ -40,6 +40,21 @@ $MISSION
 ## Your Task
 1-N numbered steps specific to this role
 
+## Autonomous Execution
+- Supervision level determines when to stop for humans
+- CI/CD checkpoint rules (role-specific)
+
+## Knowledge Gaps & Research
+- Epistemic humility statement
+- Role-specific research triggers
+- NLM research actions (query → deep research → consult)
+
+## Documentation & Deliverables
+- Dual-write protocol (Fusebase + local)
+- Role-specific Fusebase page and local file
+- Kanban update triggers
+- Failure handling (log_fusebase_pending)
+
 ## Rules
 - Follow coordination rules
 - Role-specific constraints

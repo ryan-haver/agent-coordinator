@@ -31,6 +31,46 @@ Refactor the billing module to support multi-currency payments
 
 ---
 
+### `## Quota Check`
+
+Snapshot of Antigravity Cockpit quotas at swarm start. Used for model routing decisions.
+
+```markdown
+| Model | Quota (%) |
+|-------|-----------|
+| Claude (Tier 1) | 72% |
+| Gemini Pro (Tier 2) | 95% |
+| Gemini Flash (Tier 3) | 100% |
+```
+
+---
+
+### `## Notebook`
+
+Tracks the project's NotebookLM notebook for agent research queries.
+
+| Field | Description |
+|-------|-------------|
+| **Notebook ID** | The NLM notebook ID |
+| **Alias** | Short alias for `nlm notebook query <alias>` |
+| **Plan Limit** | Source limit (300 for Pro, 50 for free) |
+| **Current Sources** | Number of sources added so far |
+| **Headroom** | Remaining source capacity |
+
+---
+
+### `## Fusebase`
+
+Tracks the project's Fusebase workspace for dual-write deliverables. Agents check this section on start — if populated, they dual-write to Fusebase; if empty, local-only.
+
+| Field | Description |
+|-------|-------------|
+| **Workspace URL** | Fusebase workspace URL |
+| **Project Folder ID** | Folder containing all deliverable pages |
+| **Task Board URL** | Kanban board for tracking progress |
+
+---
+
 ### `## Agents`
 
 Roster of all agents in the swarm with their assignments and current status.

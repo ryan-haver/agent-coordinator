@@ -1,7 +1,7 @@
 # MCP Server Coverage Gaps
 
 > **Last updated:** 2026-02-22
-> **Current coverage:** 100% of agent lifecycle (32 tools)
+> **Current coverage:** 100% of agent lifecycle (35 tools)
 > **Gap 19** (git branch coordination) remains intentional — agents have git CLI access
 > **Commits:** `96bbc93` (round 1) + `4d200dd` (round 2)
 
@@ -11,7 +11,7 @@ This document tracks known gaps in MCP tool coverage and their resolution status
 
 ## Status: ✅ All Implemented
 
-Every gap identified has been implemented across two rounds. The MCP server now provides **32 tools** covering the full agent lifecycle, coordinator workflow, multi-workspace awareness, error recovery, and scope negotiation.
+Every gap identified has been implemented across multiple rounds. The MCP server now provides **35 tools** covering the full agent lifecycle, coordinator workflow, multi-workspace awareness, error recovery, scope negotiation, and Fusebase dual-write resilience.
 
 ### Gap Resolution Summary
 
@@ -95,6 +95,9 @@ Every gap identified has been implemented across two rounds. The MCP server now 
 | Remove agent | `remove_agent_from_manifest` | ✅ |
 | Update agent config | `update_agent_in_manifest` | ✅ |
 | Generate swarm report | `complete_swarm` (auto-generates `swarm-report.md`) | ✅ |
+| Log failed Fusebase write | `log_fusebase_pending` | ✅ |
+| Retry pending Fusebase writes | `sync_fusebase_pending` | ✅ |
+| Check Fusebase sync status | `get_fusebase_sync_status` | ✅ |
 
 ---
 

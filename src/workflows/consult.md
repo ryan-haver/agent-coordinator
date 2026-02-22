@@ -9,6 +9,16 @@ metadata:
 
 You have invoked the `/consult` workflow. As an agent, you should use this when you are stuck (e.g. 3+ attempts failed on the same task) but you don't want to lose your current context in a full handoff.
 
+## Step 0: TRY NLM RESEARCH FIRST
+
+Before consulting another model, try researching the answer yourself — it's cheaper and often sufficient:
+
+1. Query the project notebook: `nlm notebook query <alias> "<your question>"`
+2. If insufficient, initiate deep research: `nlm research start <notebook-id> "<topic>"`
+3. If research resolves your blocker → **cancel consultation**, continue your task
+
+Only proceed to Step 1 if NLM research didn't help.
+
 ## Step 1: CREATE CONSULT REQUEST
 
 Write a file named `consult_request.md` in the project root containing:

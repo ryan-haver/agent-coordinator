@@ -153,3 +153,45 @@ The `task_routing` section in `model_fallback.json` maps work categories to mode
 | Path separators | `\` | `/` |
 
 The skill, workflows, and configs use `~/` notation which both platforms resolve correctly at the AI agent level.
+
+---
+
+## NotebookLM Configuration
+
+NotebookLM is the **research brain** for all agents. It's accessed via the `nlm` CLI and MCP server.
+
+### Setup
+1. Install the NotebookLM CLI: `npm install -g nlm-cli`
+2. The `nlm-skill` is deployed by `install.ps1` — no manual config needed
+
+### Per-Swarm Usage
+The PM agent creates a project notebook during swarm initialization and records the notebook ID and alias in the manifest `## Notebook` section. All agents then query this notebook for context.
+
+### Research Escalation
+Agents follow the epistemic humility protocol (SKILL.md §10):
+1. `nlm notebook query <alias> "<question>"` — query existing knowledge
+2. `nlm research start <notebook-id> "<topic>"` — initiate deep research
+3. `nlm notebook create "<title>"` — create a new research notebook for deep dives
+
+---
+
+## Fusebase Configuration
+
+Fusebase provides **persistent artifact storage** and collaboration. Agents dual-write to both Fusebase and local files (SKILL.md §9).
+
+### Prerequisites
+- Fusebase MCP server configured in your MCP settings
+- A Fusebase workspace accessible to agents
+
+### How It Works
+1. The PM agent creates a project folder and kanban board in Fusebase during swarm setup
+2. The PM populates the manifest `## Fusebase` section with workspace URL, folder ID, and board URL
+3. All agents check this section — if populated, they dual-write; if empty, local-only
+4. If a Fusebase write fails, agents call `log_fusebase_pending` and continue locally
+5. At phase gates, the PM reconciles any pending writes via `sync_fusebase_pending`
+
+### Dual-Write Principle
+| Layer | Source of Truth For |
+|-------|-------------------|
+| **Local files** | Agents (always available, grep-able) |
+| **Fusebase pages** | Humans (rich UI, comments, @mentions) |

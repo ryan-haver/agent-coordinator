@@ -12,14 +12,16 @@ Coding with AI hits the same walls:
 
 ## The Solution
 
-Agent Coordinator is a **4-part coordination system** installed into your Antigravity environment:
+Agent Coordinator is a **6-part coordination system** installed into your Antigravity environment:
 
 | Part | What It Does | When To Use |
 |------|-------------|-------------|
 | **Handoff** | Context-aware model switching via structured manifests | Context filling up, reasoning loops |
 | **Swarm** | Multi-agent decomposition with phased execution | Complex multi-file tasks |
 | **Consultation** | Lightweight cross-model Q&A without losing context | Stuck on a specific problem |
-| **MCP Server** | Programmatic manifest management via MCP tools | Automated coordination (Phase 1B) |
+| **NotebookLM** | Research brain — query knowledge, initiate deep research | Unfamiliar territory, knowledge gaps |
+| **Fusebase** | Persistent artifact storage with dual-write to local | Deliverables, tracking, collaboration |
+| **MCP Server** | Programmatic manifest management via 35 MCP tools | Automated coordination |
 
 ### Escalation Ladder
 
@@ -27,9 +29,10 @@ When stuck, agents follow this progression (cheapest first):
 
 ```
 1. Keep trying     — stuck for 1-2 attempts (free)
-2. Consult         — stuck for 3+ attempts → ask a different model (low cost)
-3. Handoff         — context filling up → generate manifest, switch model (medium)
-4. Swarm           — multi-track work → decompose into parallel agents (high)
+2. Research        — unfamiliar territory or 2+ failures → query NLM (low)
+3. Consult         — research didn't help, 3+ attempts → ask a different model (low)
+4. Handoff         — context filling up → generate manifest, switch model (medium)
+5. Swarm           — multi-track work → decompose into parallel agents (high)
 ```
 
 ---
