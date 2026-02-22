@@ -51,7 +51,8 @@ You are operating in a **scoped, speced swarm**. You are trusted to run build, l
    - Update your kanban card: → "In Progress" on start, → "Done" on complete
    - Tag pages with `#swarm`, `#agent-$AGENT_ID`
 2. If Fusebase is NOT configured, write to `swarm-docs/$AGENT_ID-ci.md` only
-3. Query the project notebook: `nlm notebook query <alias> "What's the deployment strategy?"`
+3. **If a Fusebase write fails**: Write locally, call MCP `log_fusebase_pending` with `action: "log"`, and continue. It will be retried at phase gates.
+4. Query the project notebook: `nlm notebook query <alias> "What's the deployment strategy?"`
 
 ## Your Mission
 $MISSION

@@ -50,7 +50,8 @@ You are operating in a **scoped, speced swarm**. You are trusted to diagnose and
    - Update your kanban card: → "In Progress" on start, → "Done" on complete
    - Tag pages with `#swarm`, `#agent-$AGENT_ID`
 2. If Fusebase is NOT configured, write to `swarm-docs/$AGENT_ID-rca.md` only
-3. Query the project notebook: `nlm notebook query <alias> "Has this error pattern been seen before?"`
+3. **If a Fusebase write fails**: Write locally, call MCP `log_fusebase_pending` with `action: "log"`, and continue. It will be retried at phase gates.
+4. Query the project notebook: `nlm notebook query <alias> "Has this error pattern been seen before?"`
 
 ## Your Mission
 $MISSION

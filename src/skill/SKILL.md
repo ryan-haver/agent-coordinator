@@ -288,6 +288,24 @@ Do NOT update the kanban on intermediate status changes — it adds latency with
 
 Read the manifest `## Fusebase` section. If `Workspace URL` and `Project Folder ID` are populated, Fusebase is configured — use it. If empty, use local `swarm-docs/` only.
 
+##### Failure Handling (Write-Ahead Log)
+
+If a Fusebase write fails, **never block work** — follow this protocol:
+
+1. **Write locally** (always succeeds — this is the safety net)
+2. **Log the failure**: Call MCP `log_fusebase_pending` with `action: "log"`, `agent_id`, `local_file`, `fusebase_page`, `fusebase_folder_id`, and `error`
+3. **Continue working** — the pending write will be retried later
+
+**Reconciliation triggers** (the system retries pending writes at these points):
+
+| Trigger | Who Runs It | How |
+|---------|------------|-----|
+| Phase gate | PM / coordinator | Call `get_fusebase_sync_status` → if pending items exist, call `sync_fusebase_pending` and retry each |
+| Swarm completion | PM / final agent | Same check before `complete_swarm` |
+| Manual | Any agent or user | Call `sync_fusebase_pending` at any time |
+
+**Retry flow**: `sync_fusebase_pending` returns the list of pending items → agent reads local file → writes to Fusebase via Fusebase MCP → on success, calls `log_fusebase_pending` with `action: "resolve"` and the `local_file` to clear it.
+
 ##### NotebookLM + Fusebase — Complementary Roles
 
 | | NotebookLM | Fusebase |

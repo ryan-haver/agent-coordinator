@@ -37,6 +37,12 @@ import {
     cleanupEvents,
     cleanupStaleEvents
 } from "./utils/swarm-registry.js";
+import {
+    appendPendingWrite,
+    resolvePendingWrite,
+    getPendingSummary,
+    clearPendingLog
+} from "./utils/fusebase-sync.js";
 
 // Read version from package.json at startup
 const PKG = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([a-zA-Z]:)/, '$1')), '..', '..', 'package.json'), 'utf8'));
@@ -601,6 +607,44 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                         workspace_root: { type: "string", description: "Optional workspace root override" }
                     },
                     required: ["agent_id"]
+                }
+            },
+            {
+                name: "log_fusebase_pending",
+                description: "Log a failed Fusebase write for later retry. Call this when a Fusebase MCP write fails so the pending write can be retried at phase gates or swarm completion. Use action='resolve' to remove an entry after successful retry.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        action: { type: "string", enum: ["log", "resolve"], description: "'log' to add a pending write, 'resolve' to remove one after successful retry" },
+                        agent_id: { type: "string", description: "Agent that failed the write" },
+                        local_file: { type: "string", description: "Path to the local file that was written successfully" },
+                        fusebase_page: { type: "string", description: "Intended Fusebase page name" },
+                        fusebase_folder_id: { type: "string", description: "Fusebase folder ID for the page" },
+                        error: { type: "string", description: "Error message from the failed Fusebase write" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    },
+                    required: ["action", "local_file"]
+                }
+            },
+            {
+                name: "sync_fusebase_pending",
+                description: "Get all pending Fusebase writes that need to be retried. Returns the list of items — the calling agent should retry each one via Fusebase MCP, then call log_fusebase_pending with action='resolve' for each success.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        agent_id: { type: "string", description: "Optional: filter to only this agent's pending writes" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    }
+                }
+            },
+            {
+                name: "get_fusebase_sync_status",
+                description: "Check if there are any pending Fusebase writes that haven't been synced. Returns total count and per-agent breakdown.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    }
                 }
             }
         ]
@@ -1736,6 +1780,87 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             });
 
             return { toolResult: `Agent ${agent_id} updated`, content: [{ type: "text", text: `Updated agent ${agent_id}: ${changes}` }] };
+        }
+
+        if (name === "log_fusebase_pending") {
+            const action = (args as any)?.action;
+            if (!action) throw new Error("Missing required argument: action");
+            const localFile = (args as any)?.local_file;
+            if (!localFile) throw new Error("Missing required argument: local_file");
+            const rootDir = resolveWorkspaceRoot(args as any);
+
+            if (action === "resolve") {
+                const resolved = await resolvePendingWrite(rootDir, localFile);
+                return {
+                    content: [{
+                        type: "text", text: resolved
+                            ? `Resolved pending write for ${localFile}`
+                            : `No pending write found for ${localFile}`
+                    }]
+                };
+            } else {
+                const agentId = (args as any)?.agent_id || "unknown";
+                const fusebasePage = (args as any)?.fusebase_page || "";
+                const fusebaseFolderId = (args as any)?.fusebase_folder_id || "";
+                const error = (args as any)?.error || "Unknown error";
+
+                await appendPendingWrite(rootDir, {
+                    agent_id: agentId,
+                    local_file: localFile,
+                    fusebase_page: fusebasePage,
+                    fusebase_folder_id: fusebaseFolderId,
+                    failed_at: new Date().toISOString(),
+                    error: error
+                });
+
+                return {
+                    content: [{ type: "text", text: `Logged pending Fusebase write: ${fusebasePage} (local: ${localFile}). Will be retried at next phase gate or swarm completion.` }]
+                };
+            }
+        }
+
+        if (name === "sync_fusebase_pending") {
+            const rootDir = resolveWorkspaceRoot(args as any);
+            const agentFilter = (args as any)?.agent_id;
+            const summary = getPendingSummary(rootDir);
+
+            let items = summary.items;
+            if (agentFilter) {
+                items = items.filter(w => w.agent_id === agentFilter);
+            }
+
+            if (items.length === 0) {
+                return {
+                    content: [{ type: "text", text: "No pending Fusebase writes to sync." }]
+                };
+            }
+
+            const itemList = items.map((w, i) =>
+                `${i + 1}. [${w.agent_id}] ${w.fusebase_page} ← ${w.local_file} (failed: ${w.failed_at}, retries: ${w.retries}, error: ${w.error})`
+            ).join("\n");
+
+            return {
+                content: [{ type: "text", text: `Pending Fusebase writes (${items.length}):\n${itemList}\n\nFor each item: 1) Read the local file, 2) Write to Fusebase page, 3) Call log_fusebase_pending with action='resolve' and local_file to clear it.` }]
+            };
+        }
+
+        if (name === "get_fusebase_sync_status") {
+            const rootDir = resolveWorkspaceRoot(args as any);
+            const summary = getPendingSummary(rootDir);
+
+            if (summary.total === 0) {
+                return {
+                    content: [{ type: "text", text: "✅ All Fusebase writes are in sync. No pending items." }]
+                };
+            }
+
+            const agentBreakdown = Object.entries(summary.by_agent)
+                .map(([agent, count]) => `  ${agent}: ${count} pending`)
+                .join("\n");
+
+            return {
+                content: [{ type: "text", text: `⚠️ ${summary.total} pending Fusebase write(s):\n${agentBreakdown}\n\nRun sync_fusebase_pending to get the list and retry each one.` }]
+            };
         }
 
         throw new Error(`Unknown tool: ${name}`);

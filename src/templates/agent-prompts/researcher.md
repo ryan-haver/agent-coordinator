@@ -39,8 +39,9 @@ You are operating in a **scoped, speced swarm**. You are trusted to research and
    - Update your kanban card: → "In Progress" on start, → "Done" on complete
    - Tag pages with `#swarm`, `#agent-$AGENT_ID`
 2. If Fusebase is NOT configured, write to `swarm-docs/$AGENT_ID-research.md` only
-3. Query the project notebook: `nlm notebook query <alias> "<question>"`
-4. Raw research stays in NLM; curated summaries go to Fusebase + local
+3. **If a Fusebase write fails**: Write locally, call MCP `log_fusebase_pending` with `action: "log"`, and continue. It will be retried at phase gates.
+4. Query the project notebook: `nlm notebook query <alias> "<question>"`
+5. Raw research stays in NLM; curated summaries go to Fusebase + local
 
 ## Your Mission
 $MISSION

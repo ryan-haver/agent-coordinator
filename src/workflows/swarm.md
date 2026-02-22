@@ -105,6 +105,7 @@ Model: [Model Name]
 3. Call MCP tool `check_phase_gates` (with `workspace_root`) with the current phase number.
 4. If issues (`🔴 CONFLICT`, `🟠 BLOCKED`) are found via `get_swarm_status`:
    - Follow Error Recovery: 1. Auto-Retry → 2. `/consult` → 3. Replace → 4. Escalate to user.
+5. **Fusebase sync**: Call MCP `get_fusebase_sync_status`. If pending writes exist, call `sync_fusebase_pending`, retry each item via Fusebase MCP, then call `log_fusebase_pending` with `action: "resolve"` for each success.
 
 > [!NOTE]
 > **CI/CD expectation**: Each agent with code-editing permissions (Developer, Debugger, DevOps, QA) is instructed to build, test, and commit before marking complete. If `poll_agent_completion` shows an agent complete, their CI/CD checkpoint has passed.

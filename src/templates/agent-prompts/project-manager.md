@@ -48,6 +48,8 @@ For your own deliverables:
 - Tag pages with `#swarm`, `#spec`, `#active`, `#project:<name>`
 
 If Fusebase is NOT configured, write to local files only and create `swarm-docs/` directory.
+**If a Fusebase write fails**: Write locally, call MCP `log_fusebase_pending` with `action: "log"`, and continue.
+**At phase gates**: Call `get_fusebase_sync_status` — if pending writes exist, call `sync_fusebase_pending`, retry each via Fusebase MCP, and call `log_fusebase_pending` with `action: "resolve"` for each success.
 Query the project notebook: `nlm notebook query <alias> "<question>"`
 
 ## Your Mission

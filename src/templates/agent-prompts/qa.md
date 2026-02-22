@@ -47,7 +47,8 @@ You are operating in a **scoped, speced swarm**. You are trusted to run tests an
    - Update your kanban card: → "In Progress" on start, → "Done" on complete
    - Tag pages with `#swarm`, `#qa`, `#agent-$AGENT_ID`
 2. If Fusebase is NOT configured, write to `swarm-docs/$AGENT_ID-test-results.md` only
-3. Query the project notebook: `nlm notebook query <alias> "What are the acceptance criteria?"`
+3. **If a Fusebase write fails**: Write locally, call MCP `log_fusebase_pending` with `action: "log"`, and continue. It will be retried at phase gates.
+4. Query the project notebook: `nlm notebook query <alias> "What are the acceptance criteria?"`
 
 ## Your Mission
 $MISSION
