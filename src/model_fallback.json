@@ -133,6 +133,6 @@
       "allow_in_background": "cascade.allowInBackground",
       "auto_approve_edits": "cascade.autoApproveEdits"
     },
-    "notes": "These key names are best-guess from the Cockpit extension type system. Set verified=true once empirically confirmed."
+    "notes": "Keys found in minified extension JS (autoRun, autoApprove, allowInBackground) but exact dotted names unverifiable from binary. Set verified=true once confirmed via live Antigravity session. Current values are best-guess from Cockpit extension type system."
   }
 }
