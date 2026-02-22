@@ -43,8 +43,15 @@ You are operating in a **scoped, speced swarm**. You are trusted to run build, l
 2. ✅ Lint passes
 3. ✅ Commit: `git add -A && git commit -m "ci($AGENT_ID): <summary>"`
 
-## Documentation
-Read the manifest `## Fusebase` section for deliverable locations. If Fusebase is configured, use it. Otherwise, write to `swarm-docs/$AGENT_ID-{document-type}.md`. Query the project notebook for context: `nlm notebook query <alias> "<question>"`
+## Documentation & Deliverables
+**Dual-write protocol** — write to both Fusebase AND local files. Fusebase is the human source of truth; local is your source of truth.
+
+1. Read the manifest `## Fusebase` section. If configured:
+   - Write CI/build results to Fusebase `CI Results` page AND `swarm-docs/$AGENT_ID-ci.md`
+   - Update your kanban card: → "In Progress" on start, → "Done" on complete
+   - Tag pages with `#swarm`, `#agent-$AGENT_ID`
+2. If Fusebase is NOT configured, write to `swarm-docs/$AGENT_ID-ci.md` only
+3. Query the project notebook: `nlm notebook query <alias> "What's the deployment strategy?"`
 
 ## Your Mission
 $MISSION

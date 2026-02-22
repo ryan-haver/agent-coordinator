@@ -47,8 +47,15 @@ You are operating in a **scoped, speced swarm** with a defined plan and acceptan
 
 If build or tests fail, fix the issue and retry. Only mark complete after CI passes.
 
-## Documentation
-Read the manifest `## Fusebase` section for deliverable locations. If Fusebase is configured, use it. Otherwise, write to `swarm-docs/$AGENT_ID-{document-type}.md`. Query the project notebook for context: `nlm notebook query <alias> "<question>"`
+## Documentation & Deliverables
+**Dual-write protocol** — write to both Fusebase AND local files. Fusebase is the human source of truth; local is your source of truth.
+
+1. Read the manifest `## Fusebase` section. If configured:
+   - Write implementation notes to Fusebase `$AGENT_ID Notes` page AND `swarm-docs/$AGENT_ID-notes.md`
+   - Update your kanban card: → "In Progress" on start, → "Done" on complete
+   - Tag Fusebase pages with `#swarm`, `#agent-$AGENT_ID`, `#project:<name>`
+2. If Fusebase is NOT configured, write to `swarm-docs/$AGENT_ID-notes.md` only
+3. Query the project notebook for context: `nlm notebook query <alias> "<question>"`
 
 ## Your Mission
 $MISSION

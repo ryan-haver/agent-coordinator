@@ -234,6 +234,69 @@ When operating in a scoped, speced swarm, agents are **trusted to act without hu
 > [!IMPORTANT]
 > The `## Autonomous Execution` section in each agent prompt defines the exact command allowlist and CI/CD checkpoint for that role. Always follow your role-specific instructions.
 
+#### 9. Fusebase Integration & Dual-Write Protocol
+
+Fusebase is the **persistent collaboration platform** for all swarm deliverables. Together with NotebookLM (the research brain) and local files (the agent source of truth), Fusebase forms the complete knowledge and deliverables layer.
+
+##### Dual-Write Principle
+
+| Layer | Source of Truth For | Why |
+|-------|-------------------|-----|
+| **Local files** (`spec.md`, `plan.md`, `swarm-docs/`) | Agents | Always available, `grep`-able, no auth, works offline |
+| **Fusebase pages** | Humans | Rich UI, comments, @mentions, persistent across branches |
+
+**Agents MUST write to both layers simultaneously.** Write to Fusebase first (via Fusebase MCP), then write the same content locally. If Fusebase is unavailable, continue with local-only — never block work on Fusebase failures.
+
+##### What Agents Write to Fusebase
+
+| Deliverable | Fusebase Page | Local File | Written By |
+|-------------|--------------|------------|------------|
+| Project Spec | `Spec` page in project folder | `spec.md` | PM |
+| Architecture Plan | `Architecture Plan` page | `plan.md` | Architect |
+| Implementation Notes | `<Agent ID> Notes` page | `swarm-docs/<agent-id>-notes.md` | Developer |
+| Test Results | `Test Results` page | `swarm-docs/<agent-id>-test-results.md` | QA |
+| Code Review | `Code Review Report` page | `swarm-docs/<agent-id>-review.md` | Code Reviewer |
+| Root Cause Analysis | `RCA` page | `swarm-docs/<agent-id>-rca.md` | Debugger |
+| Build/CI Results | `CI Results` page | `swarm-docs/<agent-id>-ci.md` | DevOps |
+| Research Findings | `Research` page | `swarm-docs/<agent-id>-research.md` | Researcher |
+| Codebase Map | `Codebase Map` page | `swarm-docs/<agent-id>-map.md` | Explorer |
+| Swarm Report | `Swarm Report` page | `swarm-report.md` | PM (final) |
+
+##### Kanban Board
+
+The PM creates a Fusebase kanban board during swarm setup. Agents update their card at **phase boundary events only**:
+
+| Event | Kanban Action |
+|-------|--------------|
+| Agent starts work | Move card → "In Progress" |
+| Agent marks `⏸️ Blocked` | Move card → "Blocked" |
+| Agent marks `✅ Complete` | Move card → "Done" |
+
+Do NOT update the kanban on intermediate status changes — it adds latency without value.
+
+##### Fusebase Tagging Convention
+
+| Tag | Purpose |
+|-----|---------|
+| `#swarm` | All pages created by a swarm |
+| `#active` / `#completed` / `#archived` | Project lifecycle state |
+| `#spec` / `#plan` / `#qa` / `#review` | Document type |
+| `#agent-<id>` | Which agent authored the page |
+| `#project:<name>` | Project grouping for cross-project search |
+
+##### How to Check Fusebase Availability
+
+Read the manifest `## Fusebase` section. If `Workspace URL` and `Project Folder ID` are populated, Fusebase is configured — use it. If empty, use local `swarm-docs/` only.
+
+##### NotebookLM + Fusebase — Complementary Roles
+
+| | NotebookLM | Fusebase |
+|--|-----------|----------|
+| **Use for** | Research, knowledge queries, external sources | Deliverables, tracking, collaboration, milestones |
+| **Agent action** | `nlm notebook query <alias> "<question>"` | `fusebase create_page`, `fusebase update_page_content` |
+| **Persistence** | Notebook per project (queryable forever) | Workspace with folders, pages, tasks |
+| **Human interaction** | Read-only summaries | Comments, @mentions, inline feedback |
+
 ### Phase Sequencing
 
 ```
