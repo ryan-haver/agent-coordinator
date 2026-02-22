@@ -112,9 +112,17 @@ function writeSwarmStatus(rootDir: string, md: string, lastEvent: string) {
             phase = activeAgent?.["Phase"] || (complete === agents.length ? "done" : "0");
         }
 
-        // Determine if user action is needed
-        const phaseAgentFiles = agentFiles.filter(a => a.phase === phase);
-        const allPhaseAgentsDone = phaseAgentFiles.length > 0 && phaseAgentFiles.every(a => a.status?.includes("Complete") || a.status?.includes("Done"));
+        // Determine if user action is needed (check phase gate completion)
+        let allPhaseAgentsDone = false;
+        if (agentFiles.length > 0) {
+            const phaseAgentFiles = agentFiles.filter(a => a.phase === phase);
+            allPhaseAgentsDone = phaseAgentFiles.length > 0 && phaseAgentFiles.every(a => a.status?.includes("Complete") || a.status?.includes("Done"));
+        } else {
+            // Fallback to manifest data for phase gate detection
+            const agentsTable2 = getTableFromSection(md, "Agents");
+            const phaseManifestAgents = (agentsTable2?.rows || []).filter(a => a["Phase"]?.trim() === phase);
+            allPhaseAgentsDone = phaseManifestAgents.length > 0 && phaseManifestAgents.every(a => a["Status"]?.includes("Complete") || a["Status"]?.includes("Done"));
+        }
         const needsAction = (supervision.toLowerCase().includes("gate") || supervision === "2") && allPhaseAgentsDone && phase !== "done";
 
         const statusObj = {
@@ -344,6 +352,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                         workspace_root: { type: "string", description: "Optional workspace root override" }
                     },
                     required: ["agent_id", "note"]
+                }
+            },
+            {
+                name: "get_handoff_notes",
+                description: "Read all handoff notes from the manifest and agent progress files. Use this to see what previous agents communicated.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    }
                 }
             }
         ]
@@ -618,15 +636,55 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             // Also append to manifest ## Handoff Notes section
             try {
                 let md = readManifest(wsRoot);
-                const handoffMatch = md.match(/(## Handoff Notes\s*\n(?:<!-- .*?-->\s*\n)?)/);
-                if (handoffMatch) {
-                    const insertPoint = handoffMatch.index! + handoffMatch[0].length;
-                    md = md.slice(0, insertPoint) + formattedNote + '\n' + md.slice(insertPoint);
+                // Robust: find the section heading and insert after it (+ any HTML comment)
+                const handoffIdx = md.indexOf('## Handoff Notes');
+                if (handoffIdx !== -1) {
+                    // Find end of heading line
+                    let insertIdx = md.indexOf('\n', handoffIdx);
+                    if (insertIdx === -1) insertIdx = md.length;
+                    else insertIdx++; // after the newline
+                    // Skip optional HTML comment line
+                    const rest = md.slice(insertIdx);
+                    const commentMatch = rest.match(/^<!--[\s\S]*?-->\s*\n/);
+                    if (commentMatch) insertIdx += commentMatch[0].length;
+                    md = md.slice(0, insertIdx) + formattedNote + '\n' + md.slice(insertIdx);
                     writeManifest(wsRoot, md);
                 }
             } catch { /* manifest write failure is non-fatal */ }
 
             return { toolResult: `Note posted by ${agent_id}`, content: [{ type: "text", text: `Note posted: ${formattedNote}` }] };
+        }
+
+        if (name === "get_handoff_notes") {
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            const notes: string[] = [];
+
+            // 1. Read from manifest ## Handoff Notes section
+            try {
+                const md = readManifest(wsRoot);
+                const notesMatch = md.match(/## Handoff Notes\s*\n(?:<!-- .*?-->\s*\n)?([\s\S]*?)(?:\n## |$)/);
+                if (notesMatch && notesMatch[1].trim()) {
+                    notes.push(...notesMatch[1].trim().split('\n').filter(l => l.trim()));
+                }
+            } catch { /* manifest may not exist */ }
+
+            // 2. Read from agent progress files
+            try {
+                const md = readManifest(wsRoot);
+                const sessionId = extractSessionId(md);
+                const allProgress = readAllAgentProgress(wsRoot, sessionId);
+                for (const ap of allProgress) {
+                    if (ap.handoff_notes?.trim()) {
+                        const agentNotes = ap.handoff_notes.split('\n').filter(l => l.trim());
+                        for (const n of agentNotes) {
+                            if (!notes.includes(n)) notes.push(n);
+                        }
+                    }
+                }
+            } catch { /* agent files may not exist */ }
+
+            const result = notes.length > 0 ? notes.join('\n') : '(No handoff notes found)';
+            return { toolResult: result, content: [{ type: "text", text: result }] };
         }
 
         if (name === "get_swarm_status") {
@@ -667,7 +725,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 }
             }
 
-            return { toolResult: JSON.stringify({ agents, gates, issues }), content: [{ type: "text", text: JSON.stringify({ agents, gates, issues }, null, 2) }] };
+            // Collect handoff notes from agent files for get_swarm_status
+            const handoffNotes: string[] = [];
+            for (const ap of agentFiles) {
+                if (ap.handoff_notes?.trim()) {
+                    handoffNotes.push(...ap.handoff_notes.split('\n').filter((l: string) => l.trim()));
+                }
+            }
+
+            return { toolResult: JSON.stringify({ agents, gates, issues, handoff_notes: handoffNotes }), content: [{ type: "text", text: JSON.stringify({ agents, gates, issues, handoff_notes: handoffNotes }, null, 2) }] };
         }
 
         if (name === "poll_agent_completion") {
@@ -769,7 +835,50 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 if (updatedIssues) md = updatedIssues;
             }
 
-            // 4. Write the consolidated manifest and update swarm status
+            // 4. Merge handoff notes from agent files into manifest
+            for (const ap of allProgress) {
+                if (ap.handoff_notes?.trim()) {
+                    const notes = ap.handoff_notes.split('\n').filter(l => l.trim());
+                    for (const note of notes) {
+                        // Only append if not already in manifest
+                        if (!md.includes(note)) {
+                            const handoffIdx = md.indexOf('## Handoff Notes');
+                            if (handoffIdx !== -1) {
+                                let insertIdx = md.indexOf('\n', handoffIdx);
+                                if (insertIdx === -1) insertIdx = md.length;
+                                else insertIdx++;
+                                const rest = md.slice(insertIdx);
+                                const commentMatch = rest.match(/^<!--[\s\S]*?-->\s*\n/);
+                                if (commentMatch) insertIdx += commentMatch[0].length;
+                                md = md.slice(0, insertIdx) + note + '\n' + md.slice(insertIdx);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 5. Auto-check phase gates if all agents in a phase are complete
+            const agentsTableForGates = getTableFromSection(md, "Agents") || agentsTable;
+            if (agentsTableForGates) {
+                const terminal = ["Complete", "Done"];
+                const phaseNumbers = [...new Set(agentsTableForGates.rows.map(r => r["Phase"]?.trim()).filter(Boolean))];
+                for (const ph of phaseNumbers) {
+                    const phaseRows = agentsTableForGates.rows.filter(r => r["Phase"]?.trim() === ph);
+                    // Check agent files for most current status
+                    const allPhaseComplete = phaseRows.every(r => {
+                        const ap = allProgress.find(a => a.agent_id === r["ID"]);
+                        const status = ap ? ap.status : r["Status"];
+                        return terminal.some(t => status?.includes(t));
+                    });
+                    if (allPhaseComplete) {
+                        // Auto-check the matching phase gate checkbox
+                        const gateRegex = new RegExp(`(- \\[)( )(\\]\\s*Phase ${ph}\\b)`, 'i');
+                        md = md.replace(gateRegex, '$1x$3');
+                    }
+                }
+            }
+
+            // 6. Write the consolidated manifest and update swarm status
             writeManifest(wsRoot, md);
             writeSwarmStatus(wsRoot, md, `Rolled up progress from ${allProgress.length} agents`);
 

@@ -178,43 +178,33 @@ Nine pre-defined roles with model recommendations. Prompts are in `~/.antigravit
 
 ### Coordination Rules
 
-These rules MUST be followed by every agent in the swarm:
+These rules MUST be followed by every agent in the swarm. **Use MCP tools — do NOT manually edit the manifest.**
 
-#### 1. Manifest First
-```
-Before doing ANY work:
-1. Read swarm-manifest.md
-2. Find your row in ## Agents
-3. Update your status to "🔄 Active"
-```
+#### 1. Announce on Start
+Call `update_agent_status` with `status: "🔄 Active"` and your `agent_id` before doing any work.
 
 #### 2. Claim Before Edit
-```
-Before editing ANY file:
-1. Check ## File Claims in swarm-manifest.md
-2. If the file is claimed by another agent → DO NOT EDIT
-3. If unclaimed → add your claim row, then edit
-```
+Call `claim_file` with the file path before editing. If it fails (already claimed), do NOT edit — call `report_issue` instead.
 
 #### 3. Stay In Scope
-Each agent has a scope defined in `## Agents`. Only edit files within your scope. If you need to change a file outside your scope, add it to `## Issues`.
+Each agent has a scope defined in `## Agents`. Only edit files within your scope. If you need a file outside your scope, call `report_issue` with severity `🟠 BLOCKED`.
 
-#### 4. Update Status On Completion
-```
-When your work is done:
-1. Update your status in ## Agents to "✅ Complete"
-2. Update your file claims to "✅ Done"
-3. Check the ## Phase Gates checkbox if you're the last in your phase
-4. Add any notes to ## Handoff Notes
-```
+#### 4. Release and Complete
+When done editing a file, call `release_file_claim` with `status: "✅ Done"`. When all work is finished, call `update_agent_status` with `status: "✅ Complete"`.
 
 #### 5. Report Conflicts and Issues
-- File edited by another agent → `🔴 CONFLICT`
-- Bug or design problem → `🟡 BUG` or `🟠 DESIGN`
-- Can't complete scope → `🟠 BLOCKED`
+Call `report_issue` with appropriate severity:
+- `🔴 CONFLICT` — file edited by another agent
+- `🟡 BUG` — functional bugs discovered
+- `🟠 DESIGN` — design problems or deviations
+- `🟠 BLOCKED` — can't complete scope
+- `🟢 NITPICK` — minor style/quality issues
 
-#### 6. Handoff Integration
-If you hit context limits mid-task, follow the Handoff Protocol (Part 1) AND add a row to `## Handoff Notes`.
+#### 6. Communicate via Handoff Notes
+Call `post_handoff_note` to leave context for successor agents (e.g., API changes, important decisions). Call `get_handoff_notes` to read notes from previous phases.
+
+#### 7. Handoff Integration
+If you hit context limits mid-task, follow the Handoff Protocol (Part 1) AND call `post_handoff_note` with your current state.
 
 ### Phase Sequencing
 
@@ -274,14 +264,20 @@ The `agent-coordinator` MCP server provides tools to programmatically manage the
 
 ### Available MCP Tools
 
-*   **`create_swarm_manifest`**: Initializes a new `swarm-manifest.md` for a project. (Req: `mission`)
-*   **`read_manifest_section`**: Reads a specific table/section from the manifest (e.g. `Agents`, `File Claims`).
-*   **`update_agent_status`**: Changes the status of an agent in the Agents table (e.g. to `✅ Complete`).
-*   **`check_phase_gates`**: Validates if all agents assigned to a specific phase have completed their work.
-*   **`claim_file`** / **`check_file_claim`** / **`release_file_claim`**: Manages file-level locks in the File Claims section to prevent conflicts between parallel agents.
-*   **`get_agent_prompt`**: Retrieves and populates a role-specific prompt (e.g., Architect, Developer) with the mission and scope variables.
-*   **`report_issue`**: Appends an issue to the Issues table (e.g. `🔴 CONFLICT`, `🟡 BUG`).
-*   **`get_swarm_status`**: Summarizes the entire manifest state (agents, phase gates, issues) as a structured JSON object.
+| Tool | Purpose |
+|------|---------|
+| `create_swarm_manifest` | Initialize a new `swarm-manifest.md` (session-scoped) |
+| `read_manifest_section` | Read a specific table/section as JSON |
+| `update_agent_status` | Set an agent's status (e.g. `🔄 Active`, `✅ Complete`) |
+| `claim_file` / `check_file_claim` / `release_file_claim` | File-level locking to prevent edit conflicts |
+| `get_agent_prompt` | Generate a populated prompt for an agent role |
+| `report_issue` | Report a bug, conflict, or design concern |
+| `post_handoff_note` | Post an inter-agent message (visible to all agents) |
+| `get_handoff_notes` | Read all handoff notes (from manifest + agent files) |
+| `get_swarm_status` | Full manifest summary: agents, gates, issues, notes |
+| `poll_agent_completion` | Check if all agents in a phase have finished |
+| `rollup_agent_progress` | Merge agent progress files into the manifest |
+| `check_phase_gates` | Check if a specific phase gate is complete |
 
 ### Available MCP Resources
 

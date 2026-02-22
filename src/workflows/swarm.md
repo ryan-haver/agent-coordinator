@@ -69,12 +69,8 @@ For each phase in your plan, do the following:
 
 ### 2a. Dispatch Agents
 For each agent in the current phase:
-1. Call MCP `update_agent_status` (with `workspace_root`) to set status to "🔄 Active".
-2. Call MCP `get_agent_prompt` to generate the populated prompt.
-3. If the supervision level is Level 2, 3, or 4 (or if instructing the user to dispatch in parallel), the branch strategy is:
-   - Base branch: `swarm/<slug>`
-   - Agent branch: `swarm/<slug>/<agent-id>` (for developers)
-4. Dispatch the agent using one of these strategies:
+1. Call MCP `get_agent_prompt` (with `workspace_root`, `role`, `mission`, `scope`, `agent_id`) to generate the populated prompt. The agent will set its own status to Active on start.
+2. Dispatch the agent using one of these strategies:
 
 **Option A: Multi-Task UI** — If your editor supports parallel agent tasks (Agent Manager, Ctrl+E → New Task, or similar), open a new task:
 ```
