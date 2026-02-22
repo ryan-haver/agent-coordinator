@@ -18,6 +18,7 @@ export interface AgentIssue {
 }
 
 export interface AgentProgress {
+    swarm_session_id: string;
     agent_id: string;
     role: string;
     status: string;
@@ -62,8 +63,9 @@ export function writeAgentProgress(workspaceRoot: string, progress: AgentProgres
 /**
  * Create a new agent progress file with defaults.
  */
-export function createAgentProgress(agentId: string, role: string, phase: string): AgentProgress {
+export function createAgentProgress(agentId: string, role: string, phase: string, sessionId: string = ''): AgentProgress {
     return {
+        swarm_session_id: sessionId,
         agent_id: agentId,
         role,
         status: '⏳ Pending',
@@ -77,9 +79,9 @@ export function createAgentProgress(agentId: string, role: string, phase: string
 
 /**
  * Read ALL agent progress files from the workspace root.
- * Used by the coordinator for roll-up.
+ * Optionally filter by session ID to avoid cross-swarm contamination.
  */
-export function readAllAgentProgress(workspaceRoot: string): AgentProgress[] {
+export function readAllAgentProgress(workspaceRoot: string, sessionId?: string): AgentProgress[] {
     const results: AgentProgress[] = [];
     try {
         const files = fs.readdirSync(workspaceRoot)
@@ -95,5 +97,47 @@ export function readAllAgentProgress(workspaceRoot: string): AgentProgress[] {
     } catch {
         // Directory doesn't exist or unreadable
     }
+    if (sessionId) {
+        return results.filter(r => r.swarm_session_id === sessionId);
+    }
     return results;
+}
+
+/**
+ * Delete all agent progress files from the workspace root.
+ * Called when creating a new swarm manifest to prevent cross-session contamination.
+ */
+export function cleanupAgentFiles(workspaceRoot: string): number {
+    let count = 0;
+    try {
+        const files = fs.readdirSync(workspaceRoot)
+            .filter(f => f.startsWith(AGENT_FILE_PREFIX) && f.endsWith(AGENT_FILE_SUFFIX));
+        for (const f of files) {
+            try {
+                fs.unlinkSync(path.join(workspaceRoot, f));
+                count++;
+            } catch {
+                // Non-fatal: file may already be deleted
+            }
+        }
+    } catch {
+        // Directory doesn't exist or unreadable
+    }
+    return count;
+}
+
+/**
+ * Extract the swarm session ID from a manifest's content.
+ * The session ID is stored as a comment: <!-- session: {id} -->
+ */
+export function extractSessionId(manifestContent: string): string {
+    const match = manifestContent.match(/<!--\s*session:\s*(\S+)\s*-->/);
+    return match ? match[1] : '';
+}
+
+/**
+ * Generate a new session ID (ISO date slug).
+ */
+export function generateSessionId(): string {
+    return new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 }

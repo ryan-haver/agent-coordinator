@@ -21,10 +21,11 @@ afterEach(() => {
 
 describe('createAgentProgress', () => {
     it('creates progress with defaults', () => {
-        const p = createAgentProgress('α', 'architect', '1');
+        const p = createAgentProgress('α', 'architect', '1', 'test-session');
         expect(p.agent_id).toBe('α');
         expect(p.role).toBe('architect');
         expect(p.phase).toBe('1');
+        expect(p.swarm_session_id).toBe('test-session');
         expect(p.status).toBe('⏳ Pending');
         expect(p.file_claims).toEqual([]);
         expect(p.issues).toEqual([]);

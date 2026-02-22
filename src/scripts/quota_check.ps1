@@ -88,8 +88,18 @@ foreach ($port in $ports) {
 }
 
 if (-not $quotaData) {
-    Write-Warning "❌ All ports failed. Could not retrieve quota data."
-    exit 1
+    Write-Warning "⚠️ All ports failed. Could not retrieve quota data."
+    Write-Warning "Writing fallback quota_snapshot.json — swarm will proceed without quota routing."
+    $fallback = @{
+        status    = "unavailable"
+        error     = "All language server ports failed"
+        models    = @()
+        timestamp = (Get-Date -Format o)
+    }
+    $outFile = Join-Path -Path $PWD -ChildPath "quota_snapshot.json"
+    $fallback | ConvertTo-Json -Depth 5 | Out-File -FilePath $outFile -Encoding utf8
+    Write-Host "⚠️ Fallback quota snapshot saved to $outFile"
+    exit 0
 }
 
 # Step 6: Write the raw quota snapshot to disk

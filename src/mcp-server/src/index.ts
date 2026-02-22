@@ -18,6 +18,9 @@ import {
     writeAgentProgress,
     createAgentProgress,
     readAllAgentProgress,
+    cleanupAgentFiles,
+    extractSessionId,
+    generateSessionId,
     AgentProgress
 } from "./utils/agent-progress.js";
 import path from "path";
@@ -295,6 +298,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                         workspace_root: { type: "string", description: "Optional workspace root override" }
                     }
                 }
+            },
+            {
+                name: "poll_agent_completion",
+                description: "Check if all agents in a phase have reached terminal status (Complete/Done/Blocked/Failed). Use this to poll for completion.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        phase_number: { type: "string", description: "Phase number to check" },
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    },
+                    required: ["phase_number"]
+                }
             }
         ]
     };
@@ -319,9 +334,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             content = content.replace(/Supervision:\s*\w+/, `Supervision: ${supervision}`);
 
             const wsRoot = resolveWorkspaceRoot(args as any);
+
+            // Generate session ID and embed in manifest
+            const sessionId = generateSessionId();
+            content = `<!-- session: ${sessionId} -->\n` + content;
+
+            // Clean up agent files from previous swarms
+            const cleaned = cleanupAgentFiles(wsRoot);
+
             writeManifest(wsRoot, content);
             writeSwarmStatus(wsRoot, content, "Swarm initialized");
-            return { toolResult: "Manifest created successfully.", content: [{ type: "text", text: "Manifest created successfully." }] };
+            return { toolResult: "Manifest created successfully.", content: [{ type: "text", text: `Manifest created (session: ${sessionId}). Cleaned ${cleaned} old agent files.` }] };
         }
 
         if (name === "read_manifest_section") {
@@ -343,11 +366,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             // Write to per-agent progress file (concurrency-safe)
             let progress = readAgentProgress(wsRoot, agent_id);
             if (!progress) {
-                // Agent file doesn't exist yet — read role/phase from manifest
+                // Agent file doesn't exist yet — read role/phase/session from manifest
                 const md = readManifest(wsRoot);
+                const sessionId = extractSessionId(md);
                 const res = getTableFromSection(md, "Agents");
                 const row = res?.rows.find(r => r["ID"] === agent_id);
-                progress = createAgentProgress(agent_id, row?.["Role"] || "unknown", row?.["Phase"] || "1");
+                progress = createAgentProgress(agent_id, row?.["Role"] || "unknown", row?.["Phase"] || "1", sessionId);
             }
             progress.status = status;
             writeAgentProgress(wsRoot, progress);
@@ -359,16 +383,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const phaseNum = (args as any)?.phase_number;
             if (!phaseNum) throw new Error("Missing required argument: phase_number");
             const wsRoot = resolveWorkspaceRoot(args as any);
-            const md = readManifest(wsRoot);
-            const res = getTableFromSection(md, "Agents");
-            if (!res) throw new Error("Agents section not found");
 
-            // Use exact match to avoid "1" matching "10", "11", etc.
-            const phaseAgents = res.rows.filter(r => r["Phase"]?.trim() === String(phaseNum).trim());
+            // Read from agent progress files first (most current), manifest as fallback
+            const md = readManifest(wsRoot);
+            const sessionId = extractSessionId(md);
+            const agentFiles = readAllAgentProgress(wsRoot, sessionId);
+            const phaseFromFiles = agentFiles.filter(a => a.phase === String(phaseNum).trim());
+
+            let phaseAgents: Array<{ id: string; status: string }>;
+            if (phaseFromFiles.length > 0) {
+                phaseAgents = phaseFromFiles.map(a => ({ id: a.agent_id, status: a.status }));
+            } else {
+                // Fallback to manifest
+                const res = getTableFromSection(md, "Agents");
+                if (!res) throw new Error("Agents section not found");
+                const rows = res.rows.filter(r => r["Phase"]?.trim() === String(phaseNum).trim());
+                phaseAgents = rows.map(r => ({ id: r["ID"], status: r["Status"] }));
+            }
+
             if (phaseAgents.length === 0) return { content: [{ type: "text", text: "No agents in this phase." }] };
 
-            const allDone = phaseAgents.every(r => r["Status"]?.trim() === "✅ Complete" || r["Status"]?.includes("Complete"));
-            const summary = phaseAgents.map(r => `${r["ID"]}: ${r["Status"]}`).join("\n");
+            const terminal = ["Complete", "Done", "Blocked", "Failed"];
+            const allDone = phaseAgents.every(a => terminal.some(t => a.status?.includes(t)));
+            const summary = phaseAgents.map(a => `${a.id}: ${a.status}`).join("\n");
 
             const resultText = `All agents complete: ${allDone}\nDetails:\n${summary}`;
             return { toolResult: resultText, content: [{ type: "text", text: resultText }] };
@@ -393,9 +430,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             let progress = readAgentProgress(wsRoot, agent_id);
             if (!progress) {
                 const md = readManifest(wsRoot);
+                const sessionId = extractSessionId(md);
                 const res = getTableFromSection(md, "Agents");
                 const row = res?.rows.find(r => r["ID"] === agent_id);
-                progress = createAgentProgress(agent_id, row?.["Role"] || "unknown", row?.["Phase"] || "1");
+                progress = createAgentProgress(agent_id, row?.["Role"] || "unknown", row?.["Phase"] || "1", sessionId);
             }
             progress.file_claims.push({ file: file_path, status: "🔄 Active" });
             writeAgentProgress(wsRoot, progress);
@@ -492,9 +530,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             let progress = readAgentProgress(wsRoot, reporter);
             if (!progress) {
                 const md = readManifest(wsRoot);
+                const sessionId = extractSessionId(md);
                 const res = getTableFromSection(md, "Agents");
                 const row = res?.rows.find(r => r["ID"] === reporter);
-                progress = createAgentProgress(reporter, row?.["Role"] || "unknown", row?.["Phase"] || "1");
+                progress = createAgentProgress(reporter, row?.["Role"] || "unknown", row?.["Phase"] || "1", sessionId);
             }
             progress.issues.push({ severity, area, description });
             writeAgentProgress(wsRoot, progress);
@@ -509,7 +548,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const manifestIssues = getTableFromSection(md, "Issues")?.rows || [];
 
             // Merge per-agent progress files for up-to-date status
-            const agentFiles = readAllAgentProgress(wsRoot);
+            const sessionId = extractSessionId(md);
+            const agentFiles = readAllAgentProgress(wsRoot, sessionId);
             for (const ap of agentFiles) {
                 const row = agents.find(a => a["ID"] === ap.agent_id);
                 if (row) row["Status"] = ap.status;
@@ -539,12 +579,39 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             return { content: [{ type: "text", text: JSON.stringify({ agents, gates, issues }, null, 2) }] };
         }
 
+        if (name === "poll_agent_completion") {
+            const phaseNum = (args as any)?.phase_number;
+            if (!phaseNum) throw new Error("Missing required argument: phase_number");
+            const wsRoot = resolveWorkspaceRoot(args as any);
+            const md = readManifest(wsRoot);
+            const sessionId = extractSessionId(md);
+            const allProgress = readAllAgentProgress(wsRoot, sessionId);
+            const phaseAgents = allProgress.filter(a => a.phase === String(phaseNum).trim());
+
+            const terminal = ["Complete", "Done", "Blocked", "Failed"];
+            const allDone = phaseAgents.length > 0 &&
+                phaseAgents.every(a => terminal.some(t => a.status?.includes(t)));
+
+            const result = {
+                all_complete: allDone,
+                total_agents: phaseAgents.length,
+                agents: phaseAgents.map(a => ({
+                    id: a.agent_id,
+                    role: a.role,
+                    status: a.status,
+                    last_updated: a.last_updated
+                }))
+            };
+            return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        }
+
         if (name === "rollup_agent_progress") {
             const wsRoot = resolveWorkspaceRoot(args as any);
             let md = readManifest(wsRoot);
 
-            // Read all per-agent progress files
-            const allProgress = readAllAgentProgress(wsRoot);
+            // Read all per-agent progress files (session-scoped)
+            const sessionId = extractSessionId(md);
+            const allProgress = readAllAgentProgress(wsRoot, sessionId);
             if (allProgress.length === 0) {
                 return { content: [{ type: "text", text: "No agent progress files found." }] };
             }

@@ -38,7 +38,8 @@ Extract the following from $ARGUMENTS:
 3. If `--auto` is specified:
    - YOU MUST run the `auto_mode_toggle` script (located in `~/.gemini/antigravity/skills/agent-coordination/scripts/auto_mode_toggle.[ps1|sh]`) to backup and enable autonomous Antigravity settings.
 4. **Quota Pre-check**: Run `~/.gemini/antigravity/skills/agent-coordination/scripts/quota_check.ps1` (or `.sh` on mac/linux) in the terminal. Read the output `quota_snapshot.json` to get the real-time Cockpit quota percentages.
-   - If any core model is < 30%, explicitly auto-route those assignments to fallback models (`model_fallback.json`).
+   - If the output contains `"status": "unavailable"`, skip quota-based routing and use defaults from `model_fallback.json`.
+   - Otherwise, if any core model is < 30%, explicitly auto-route those assignments to fallback models (`model_fallback.json`).
 5. Call MCP tool `create_swarm_manifest` with `mission`, `supervision_level`, and `workspace_root` set to the current project root directory. Explicitly populate the `## Quota Check` table in the manifest with the metrics you just read from the JSON.
 6. Present the swarm plan to the user:
 
@@ -73,24 +74,26 @@ For each agent in the current phase:
 3. If the supervision level is Level 2, 3, or 4 (or if instructing the user to dispatch in parallel), the branch strategy is:
    - Base branch: `swarm/<slug>`
    - Agent branch: `swarm/<slug>/<agent-id>` (for developers)
-4. Output the dispatch block:
+4. Dispatch the agent using one of these strategies:
 
+**Option A: Multi-Task UI** — If your editor supports parallel agent tasks (Agent Manager, Ctrl+E → New Task, or similar), open a new task:
 ```
 📌 PHASE [X]: [PHASE NAME]
-Dispatch this agent via Agent Manager (Ctrl+E → New Task):
 Model: [Model Name]
-
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [Prompt from get_agent_prompt]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-**Note on Auto Mode**: If `--auto` is specified, attempt to dispatch agents programmatically if the environment supports it, otherwise present the prompts cleanly for rapid human copy-paste.
+**Option B: Sequential Manual** — If no multi-task UI exists, present the prompt to the user. The user will create a new chat/session, paste the prompt, and confirm when the agent is done.
 
-### 2b. Roll Up, Verify Gates & Resolve Issues
-1. Call MCP `rollup_agent_progress` (with `workspace_root`) to merge all per-agent progress files into the manifest.
-2. Call MCP tool `check_phase_gates` (with `workspace_root`) with the current phase number.
-3. If issues (`🔴 CONFLICT`, `🟠 BLOCKED`) are found via `get_swarm_status`:
+**Option C: `--auto` Mode** — For full autonomous mode, attempt CLI dispatch if available, otherwise present all prompts cleanly for rapid copy-paste.
+
+### 2b. Poll for Completion, Roll Up & Verify Gates
+1. **Poll for completion:** Call MCP `poll_agent_completion` (with `workspace_root` and `phase_number`) to check if all agents in this phase are done. If not all complete, wait and poll again. On Level 1/2, you may ask the user to confirm instead.
+2. Call MCP `rollup_agent_progress` (with `workspace_root`) to merge all per-agent progress files into the manifest.
+3. Call MCP tool `check_phase_gates` (with `workspace_root`) with the current phase number.
+4. If issues (`🔴 CONFLICT`, `🟠 BLOCKED`) are found via `get_swarm_status`:
    - Follow Error Recovery: 1. Auto-Retry → 2. `/consult` → 3. Replace → 4. Escalate to user.
 
 **⏸️ GATE (Level 1 & 2)**: Wait for user to confirm the phase is complete before moving to the next phase ("Proceed to Phase [X+1]"). For Levels 3 and 4, proceed immediately if `check_phase_gates` is true.
@@ -105,7 +108,7 @@ Once the final phase is complete:
 2. Call MCP tool `get_swarm_status` (with `workspace_root`) to gather the final state.
 3. If `--auto` was used:
    - YOU MUST run the `auto_mode_toggle --restore` script to revert the user's Antigravity settings back to normal.
-3. Generate the final Swarm Report:
+4. Generate the final Swarm Report:
 
 ```markdown
 ## 🐝 Swarm Output: [Task]

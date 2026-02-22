@@ -36,7 +36,8 @@ Extract the following from $ARGUMENTS, matching the logic of the standard `/swar
 3. If `--auto` is specified:
    - YOU MUST run the `auto_mode_toggle` script (located in `~/.gemini/antigravity/skills/agent-coordination/scripts/auto_mode_toggle.[ps1|sh]`) to backup and enable autonomous Antigravity settings.
 4. **Quota Pre-check**: Run `~/.gemini/antigravity/skills/agent-coordination/scripts/quota_check.ps1` (or `.sh` on mac/linux) in the terminal. Read the output `quota_snapshot.json` to get the real-time Cockpit quota percentages.
-   - If any core model is < 30%, explicitly auto-route those assignments to fallback models (`model_fallback.json`).
+   - If the output contains `"status": "unavailable"`, skip quota-based routing and use defaults from `model_fallback.json`.
+   - Otherwise, if any core model is < 30%, explicitly auto-route those assignments to fallback models (`model_fallback.json`).
 5. Call MCP tool `create_swarm_manifest` with `mission`, `supervision_level`, and `workspace_root` set to the current project root directory. Explicitly populate the `## Quota Check` table in the manifest with the metrics you just read from the JSON.
 6. Present the swarm plan for confirmation (ONLY IF Level 1 or 2 is used). If Level 3 or 4, proceed immediately.
 
@@ -82,6 +83,11 @@ Agent: β [Role] | Model: [Model Name]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ...
 ```
+
+For dispatch, choose the strategy that matches the environment:
+- **Multi-Task UI**: Open a new task per agent if the editor supports it
+- **Sequential Manual**: Present each prompt for the user to dispatch manually
+- **`--auto` Mode**: Attempt CLI dispatch or present all prompts for rapid copy-paste
 
 ---
 
