@@ -76,5 +76,15 @@ for PORT in $PORTS; do
     fi
 done
 
-echo "❌ All ports failed. Could not retrieve quota data." >&2
-exit 1
+echo "⚠️ All ports failed. Could not retrieve quota data." >&2
+echo "Writing fallback quota_snapshot.json — swarm will proceed without quota routing."
+cat > quota_snapshot.json <<EOF
+{
+  "status": "unavailable",
+  "error": "All language server ports failed",
+  "models": [],
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+echo "⚠️ Fallback quota snapshot saved to quota_snapshot.json"
+exit 0

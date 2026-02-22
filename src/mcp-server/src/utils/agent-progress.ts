@@ -34,7 +34,7 @@ const AGENT_FILE_SUFFIX = '.json';
 
 function agentFilePath(workspaceRoot: string, agentId: string): string {
     // Sanitize agent ID for filename safety (e.g., α → a0b1)
-    const safeId = agentId.replace(/[^a-zA-Z0-9_-]/g, (c) => c.charCodeAt(0).toString(16));
+    const safeId = agentId.replace(/[^a-zA-Z0-9_-]/g, (c) => c.charCodeAt(0).toString(16).padStart(4, '0'));
     return path.join(workspaceRoot, `${AGENT_FILE_PREFIX}${safeId}${AGENT_FILE_SUFFIX}`);
 }
 

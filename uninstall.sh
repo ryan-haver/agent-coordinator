@@ -70,6 +70,25 @@ if [ -d "$CFG_DIR" ]; then
     fi
 fi
 
+# 6. MCP Server deregistration
+MCP_CONFIG_FILE="$HOME_DIR/.gemini/antigravity/mcp_config.json"
+if [ -f "$MCP_CONFIG_FILE" ]; then
+    node -e "
+        const fs = require('fs');
+        const configPath = process.argv[1];
+        try {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            if (config.mcpServers && config.mcpServers['agent-coordinator']) {
+                delete config.mcpServers['agent-coordinator'];
+                fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+                console.log('  ✅ Removed agent-coordinator from mcp_config.json');
+            }
+        } catch (e) {
+            console.log('  ⚠️  Could not clean mcp_config.json:', e.message);
+        }
+    " -- "$MCP_CONFIG_FILE"
+fi
+
 echo ""
 echo "🏷️  Agent Coordinator uninstalled."
 echo "  Note: Global gitignore at ~/.config/git/ignore was left intact."

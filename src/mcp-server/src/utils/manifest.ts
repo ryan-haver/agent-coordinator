@@ -29,9 +29,11 @@ function escapeRegex(s: string): string {
  * Returns null if the section or table is not found.
  */
 export function getTableFromSection(markdown: string, sectionHeading: string): ParseResult | null {
+    // Normalize line endings to LF for consistent regex matching
+    const md = markdown.replace(/\r\n/g, '\n');
     const escaped = escapeRegex(sectionHeading);
     const sectionRegex = new RegExp(`##\\s+${escaped}\\s*\\n+([\\s\\S]*?)(?:\\n##\\s|$)`);
-    const sectionMatch = sectionRegex.exec(markdown);
+    const sectionMatch = sectionRegex.exec(md);
 
     if (!sectionMatch) {
         return null;
@@ -111,16 +113,19 @@ export function serializeTableToString(headers: string[], rows: TableRow[]): str
  * Returns the modified complete markdown string.
  */
 export function replaceTableInSection(markdown: string, sectionHeading: string, newTableText: string): string | null {
+    // Normalize line endings to LF for consistent regex matching
+    const normalizedMd = markdown.replace(/\r\n/g, '\n');
     const escaped = escapeRegex(sectionHeading);
     const sectionRegex = new RegExp(`(##\\s+${escaped}\\s*\\n+[\\s\\S]*?)(?:\\n##\\s|$)`);
-    const sectionMatch = sectionRegex.exec(markdown);
+    const sectionMatch = sectionRegex.exec(normalizedMd);
 
     if (!sectionMatch) {
         return null;
     }
 
-    const fullMatchText = sectionMatch[0]; // Includes the next heading if matched via the (?:\\n##\\s|$) condition
-    const isEOF = !fullMatchText.endsWith('\n## ');
+    const fullMatchText = sectionMatch[0];
+    // Check if the match ends at EOF (no next heading found)
+    const isEOF = !(/\n##\s/.test(fullMatchText.slice(-5)));
 
     // We only want to replace within the section content, not the next heading.
     let sectionContent = sectionMatch[1];
@@ -155,10 +160,10 @@ export function replaceTableInSection(markdown: string, sectionHeading: string, 
 
     const newSectionContent = beforeTable + (beforeTable.endsWith('\n') ? '' : '\n') + newTableText + '\n' + afterTable;
 
-    const beforeSection = markdown.substring(0, sectionMatch.index);
+    const beforeSection = normalizedMd.substring(0, sectionMatch.index);
     // The full match may include the next heading prefix (e.g., '\n## ').
     // afterSection must start AFTER the full match to avoid duplicating the next heading.
-    const afterSection = isEOF ? '' : markdown.substring(sectionMatch.index + sectionMatch[0].length);
+    const afterSection = isEOF ? '' : normalizedMd.substring(sectionMatch.index + sectionMatch[0].length);
     // If not EOF, we need to re-insert the next heading prefix that was part of the lookahead
     const nextHeadingPrefix = isEOF ? '' : sectionMatch[0].substring(sectionContent.length);
 

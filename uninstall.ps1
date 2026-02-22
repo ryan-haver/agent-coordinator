@@ -67,6 +67,22 @@ if (Test-Path $cfgDir) {
     }
 }
 
+# 6. MCP Server deregistration
+$mcpConfigFile = Join-Path $home_ ".gemini\antigravity\mcp_config.json"
+if (Test-Path $mcpConfigFile) {
+    try {
+        $mcpConfig = Get-Content $mcpConfigFile -Raw | ConvertFrom-Json
+        if ($mcpConfig.mcpServers."agent-coordinator") {
+            $mcpConfig.mcpServers.PSObject.Properties.Remove("agent-coordinator")
+            $mcpConfig | ConvertTo-Json -Depth 5 | Set-Content $mcpConfigFile
+            Write-Host "  ✅ Removed agent-coordinator from mcp_config.json" -ForegroundColor Green
+        }
+    }
+    catch {
+        Write-Host "  ⚠️ Could not clean mcp_config.json: $_" -ForegroundColor Yellow
+    }
+}
+
 Write-Host ""
 Write-Host "🏷️  Agent Coordinator uninstalled." -ForegroundColor Cyan
 Write-Host "  Note: Global gitignore at ~/.config/git/ignore was left intact." -ForegroundColor Gray

@@ -28,7 +28,7 @@ import os from "os";
 import fs from "fs";
 
 // Read version from package.json at startup
-const PKG = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1')), '..', '..', 'package.json'), 'utf8'));
+const PKG = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([a-zA-Z]:)/, '$1')), '..', '..', 'package.json'), 'utf8'));
 
 const globalConfigPath = path.join(os.homedir(), ".antigravity-configs");
 
@@ -91,19 +91,30 @@ function writeSwarmStatus(rootDir: string, md: string, lastEvent: string) {
         const missionMatch = md.match(/## Mission\s*\n+(.+)/);
         const task = missionMatch ? missionMatch[1].trim() : "";
 
-        const agentsTable = getTableFromSection(md, "Agents");
-        const agents = agentsTable?.rows || [];
-        const active = agents.filter(a => a["Status"]?.includes("Active")).length;
-        const complete = agents.filter(a => a["Status"]?.includes("Complete")).length;
-        const pending = agents.filter(a => a["Status"]?.includes("Pending")).length;
+        // Read agent files for most up-to-date counts (fallback to manifest)
+        const sessionId = extractSessionId(md);
+        const agentFiles = readAllAgentProgress(rootDir, sessionId);
 
-        // Determine current phase from agent statuses
-        const activeAgent = agents.find(a => a["Status"]?.includes("Active"));
-        const phase = activeAgent?.["Phase"] || (complete === agents.length ? "done" : "0");
+        let active: number, complete: number, pending: number, phase: string;
+        if (agentFiles.length > 0) {
+            active = agentFiles.filter(a => a.status?.includes("Active")).length;
+            complete = agentFiles.filter(a => a.status?.includes("Complete") || a.status?.includes("Done")).length;
+            pending = agentFiles.filter(a => a.status?.includes("Pending")).length;
+            const activeAgent = agentFiles.find(a => a.status?.includes("Active"));
+            phase = activeAgent?.phase || (complete === agentFiles.length ? "done" : "0");
+        } else {
+            const agentsTable = getTableFromSection(md, "Agents");
+            const agents = agentsTable?.rows || [];
+            active = agents.filter(a => a["Status"]?.includes("Active")).length;
+            complete = agents.filter(a => a["Status"]?.includes("Complete")).length;
+            pending = agents.filter(a => a["Status"]?.includes("Pending")).length;
+            const activeAgent = agents.find(a => a["Status"]?.includes("Active"));
+            phase = activeAgent?.["Phase"] || (complete === agents.length ? "done" : "0");
+        }
 
-        // Determine if user action is needed (supervision=gates + all phase agents done)
-        const phaseAgents = agents.filter(a => a["Phase"]?.trim() === phase);
-        const allPhaseAgentsDone = phaseAgents.length > 0 && phaseAgents.every(a => a["Status"]?.includes("Complete"));
+        // Determine if user action is needed
+        const phaseAgentFiles = agentFiles.filter(a => a.phase === phase);
+        const allPhaseAgentsDone = phaseAgentFiles.length > 0 && phaseAgentFiles.every(a => a.status?.includes("Complete") || a.status?.includes("Done"));
         const needsAction = (supervision.toLowerCase().includes("gate") || supervision === "2") && allPhaseAgentsDone && phase !== "done";
 
         const statusObj = {
@@ -310,6 +321,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                     },
                     required: ["phase_number"]
                 }
+            },
+            {
+                name: "rollup_agent_progress",
+                description: "Merge all per-agent progress files into the main manifest. Call between phases and at the end of the swarm.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        workspace_root: { type: "string", description: "Optional workspace root override" }
+                    }
+                }
             }
         ]
     };
@@ -417,8 +438,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             if (!agent_id || !file_path) throw new Error("Missing required arguments: agent_id, file_path");
             const wsRoot = resolveWorkspaceRoot(args as any);
 
-            // Check all agent files for existing active claims
-            const allProgress = readAllAgentProgress(wsRoot);
+            // Check all agent files for existing active claims (session-scoped)
+            const md = readManifest(wsRoot);
+            const sessionIdForClaims = extractSessionId(md);
+            const allProgress = readAllAgentProgress(wsRoot, sessionIdForClaims);
             for (const ap of allProgress) {
                 const activeClaim = ap.file_claims.find(c => c.file === file_path && !c.status.includes("Done") && !c.status.includes("Abandoned"));
                 if (activeClaim) {
@@ -449,8 +472,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             // Check both manifest AND agent progress files for claims
             const claims: Array<{ agent_id: string; file: string; status: string; source: string }> = [];
 
-            // 1. Check agent progress files (most up-to-date)
-            const allProgress = readAllAgentProgress(wsRoot);
+            // 1. Check agent progress files (most up-to-date, session-scoped)
+            const mdForCheck = readManifest(wsRoot);
+            const sessionIdForCheck = extractSessionId(mdForCheck);
+            const allProgress = readAllAgentProgress(wsRoot, sessionIdForCheck);
             for (const ap of allProgress) {
                 for (const c of ap.file_claims) {
                     if (c.file === file_path) {
@@ -474,7 +499,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 }
             } catch { /* manifest may not exist yet */ }
 
-            return { content: [{ type: "text", text: JSON.stringify(claims, null, 2) }] };
+            return { toolResult: JSON.stringify(claims), content: [{ type: "text", text: JSON.stringify(claims, null, 2) }] };
         }
 
         if (name === "release_file_claim") {
@@ -552,7 +577,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const agentFiles = readAllAgentProgress(wsRoot, sessionId);
             for (const ap of agentFiles) {
                 const row = agents.find(a => a["ID"] === ap.agent_id);
-                if (row) row["Status"] = ap.status;
+                if (row) {
+                    row["Status"] = ap.status;
+                    if (ap.phase) row["Phase"] = ap.phase;
+                }
             }
 
             // Merge issues from agent files
@@ -576,7 +604,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 }
             }
 
-            return { content: [{ type: "text", text: JSON.stringify({ agents, gates, issues }, null, 2) }] };
+            return { toolResult: JSON.stringify({ agents, gates, issues }), content: [{ type: "text", text: JSON.stringify({ agents, gates, issues }, null, 2) }] };
         }
 
         if (name === "poll_agent_completion") {
@@ -602,7 +630,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     last_updated: a.last_updated
                 }))
             };
-            return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+            return { toolResult: JSON.stringify(result), content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
         }
 
         if (name === "rollup_agent_progress") {
@@ -658,7 +686,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                         });
                     }
                 }
-                issuesTable.rows = mergedIssues;
+                // Merge: keep existing manifest issues that aren't duplicated by agent files
+                const existingIssues = issuesTable.rows.filter(existing =>
+                    !mergedIssues.some(mi => mi["Description"] === existing["Description"] && mi["Reported By"] === existing["Reported By"])
+                );
+                issuesTable.rows = [...existingIssues, ...mergedIssues];
                 const updatedIssues = replaceTableInSection(md, "Issues", serializeTableToString(issuesTable.headers, issuesTable.rows));
                 if (updatedIssues) md = updatedIssues;
             }
