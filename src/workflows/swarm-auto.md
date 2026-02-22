@@ -94,6 +94,7 @@ For dispatch, choose the strategy that matches the environment:
 ## Step 3: COMPLETION / CLEANUP
 
 1. Call MCP `rollup_agent_progress` (with `workspace_root`) for a final merge of all agent progress into the manifest.
-2. If `--auto` was used, ensure the final agent (`QA` or `PM`) is instructed to run `auto_mode_toggle --restore` in their prompt to revert the user's Antigravity settings back to normal once the swarm finishes. 
+2. Instruct the **final agent** (typically QA or PM) to call MCP `complete_swarm` (with `workspace_root`) when all work is done. This archives the manifest, generates `swarm-report.md`, cleans up agent files, and deregisters from the swarm registry.
+3. If `--auto` was used, ensure the final agent is also instructed to run `auto_mode_toggle --restore` in their prompt to revert settings.
 
 Since you generated all the prompts up front, your job as the coordinator is done. The human user (or the `--auto` orchestrator) will take it from here.

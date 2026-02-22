@@ -262,22 +262,71 @@ When an agent is stuck (3+ attempts failed), before a full handoff:
 
 The `agent-coordinator` MCP server provides tools to programmatically manage the Swarm Manifest, allowing the AI to orchestrate the swarm directly rather than generating manual instructions. 
 
-### Available MCP Tools
+### Available MCP Tools (32 total)
 
+#### Core Lifecycle
 | Tool | Purpose |
 |------|---------|
 | `create_swarm_manifest` | Initialize a new `swarm-manifest.md` (session-scoped) |
+| `complete_swarm` | Finalize swarm: rollup, archive, report, deregister, cleanup |
+| `advance_phase` | Atomically validate gate, rollup progress, advance to next phase |
+
+#### Manifest Read/Write
+| Tool | Purpose |
+|------|---------|
 | `read_manifest_section` | Read a specific table/section as JSON |
+| `set_manifest_field` | Set a table in a manifest section (e.g. Quota Check, Branches) |
+
+#### Agent Management
+| Tool | Purpose |
+|------|---------|
 | `update_agent_status` | Set an agent's status (e.g. `🔄 Active`, `✅ Complete`) |
-| `claim_file` / `check_file_claim` / `release_file_claim` | File-level locking to prevent edit conflicts |
+| `add_agent_to_manifest` | Add a new agent row to the Agents table |
+| `remove_agent_from_manifest` | Remove an agent from the Agents table |
+| `update_agent_in_manifest` | Update an agent's Role, Model, or Scope |
+| `mark_agent_failed` | Mark failed, release claims, auto-post handoff note |
+| `reassign_agent` | Transfer scope and pending work to a replacement agent |
+| `get_my_assignment` | Get a specific agent's row from the manifest |
+| `get_agent_progress` | Get detailed progress (status, claims, issues, notes) |
 | `get_agent_prompt` | Generate a populated prompt for an agent role |
+
+#### File Claims
+| Tool | Purpose |
+|------|---------|
+| `claim_file` | Register a file claim before editing (atomic) |
+| `check_file_claim` | Check if a file is already claimed |
+| `release_file_claim` | Release a file claim after editing |
+
+#### Communication
+| Tool | Purpose |
+|------|---------|
+| `post_handoff_note` | Post an inter-agent message (visible to all) |
+| `get_handoff_notes` | Read all handoff notes (manifest + agent files) |
 | `report_issue` | Report a bug, conflict, or design concern |
-| `post_handoff_note` | Post an inter-agent message (visible to all agents) |
-| `get_handoff_notes` | Read all handoff notes (from manifest + agent files) |
+| `broadcast_event` | Broadcast a structured event (build_broken, api_changed, etc.) |
+| `get_events` | Retrieve broadcast events, optionally filtered by type |
+
+#### Monitoring & Gates
+| Tool | Purpose |
+|------|---------|
 | `get_swarm_status` | Full manifest summary: agents, gates, issues, notes |
 | `poll_agent_completion` | Check if all agents in a phase have finished |
 | `rollup_agent_progress` | Merge agent progress files into the manifest |
 | `check_phase_gates` | Check if a specific phase gate is complete |
+| `update_phase_gate` | Manually check/uncheck a phase gate checkbox |
+
+#### Scope Management
+| Tool | Purpose |
+|------|---------|
+| `request_scope_expansion` | Request permission to edit a file outside assigned scope |
+| `grant_scope_expansion` | Approve a pending scope expansion request |
+| `deny_scope_expansion` | Deny a pending scope expansion request |
+
+#### System
+| Tool | Purpose |
+|------|---------|
+| `list_active_swarms` | List all active swarms across all workspaces |
+| `check_quota` | Read the current model quota snapshot |
 
 ### Available MCP Resources
 

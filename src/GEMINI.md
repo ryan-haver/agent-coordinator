@@ -27,4 +27,6 @@ Routing is **task-aware** — the best model depends on the remaining work, not 
 - `/resume` — Read active manifest and continue where the last model left off
 - `/swarm` — Decompose a task into a multi-agent swarm (supervised, phased)
 - `/swarm-auto` — Rapid swarm with all prompts generated upfront
+- `/status` — Swarm progress dashboard
+- `/consult` — Cross-model consultation when stuck (3+ failures)
 - `/health` — Audit system status and model config freshness

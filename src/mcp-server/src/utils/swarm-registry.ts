@@ -114,6 +114,7 @@ function eventsFilePath(workspace: string, sessionId: string): string {
  */
 export async function broadcastEvent(event: SwarmEvent): Promise<void> {
     if (!fs.existsSync(EVENTS_DIR)) fs.mkdirSync(EVENTS_DIR, { recursive: true });
+
     const fp = eventsFilePath(event.workspace, event.session_id);
     const lockPath = fp + '.lock';
     await withFileLock(lockPath, () => {

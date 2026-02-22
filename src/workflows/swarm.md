@@ -102,9 +102,10 @@ Once the final phase is complete:
 
 1. Call MCP `rollup_agent_progress` (with `workspace_root`) for a final merge of all agent progress into the manifest.
 2. Call MCP tool `get_swarm_status` (with `workspace_root`) to gather the final state.
-3. If `--auto` was used:
+3. Call MCP `complete_swarm` (with `workspace_root`) to finalize the swarm: archives the manifest, generates `swarm-report.md`, cleans up agent files, deregisters from the swarm registry.
+4. If `--auto` was used:
    - YOU MUST run the `auto_mode_toggle --restore` script to revert the user's Antigravity settings back to normal.
-4. Generate the final Swarm Report:
+5. Generate the final Swarm Report:
 
 ```markdown
 ## 🐝 Swarm Output: [Task]
