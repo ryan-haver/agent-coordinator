@@ -52,9 +52,13 @@ else
     fi
 
     # 2. Inject autonomous overrides using node for reliable JSON parsing
+    # Read settings keys from config (with fallbacks)
+    CONFIG_FILE="$HOME_DIR/.antigravity-configs/model_fallback.json"
+    
     node -e "
         const fs = require('fs');
         const settingsPath = process.argv[1];
+        const configPath = process.argv[2];
         let config = {};
         if (fs.existsSync(settingsPath)) {
             try {
@@ -66,11 +70,26 @@ else
             }
         }
         
-        config['cascade.autoRunCommands'] = true;
-        config['cascade.allowInBackground'] = true;
-        config['cascade.autoApproveEdits'] = true;
+        // Read keys from model_fallback.json (with defaults)
+        let keyAutoRun = 'cascade.autoRunCommands';
+        let keyBackground = 'cascade.allowInBackground';
+        let keyApproveEdits = 'cascade.autoApproveEdits';
+        if (fs.existsSync(configPath)) {
+            try {
+                const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+                if (cfg.auto_mode_settings && cfg.auto_mode_settings.keys) {
+                    keyAutoRun = cfg.auto_mode_settings.keys.auto_run_commands || keyAutoRun;
+                    keyBackground = cfg.auto_mode_settings.keys.allow_in_background || keyBackground;
+                    keyApproveEdits = cfg.auto_mode_settings.keys.auto_approve_edits || keyApproveEdits;
+                }
+            } catch (e) { /* use defaults */ }
+        }
+        
+        config[keyAutoRun] = true;
+        config[keyBackground] = true;
+        config[keyApproveEdits] = true;
         
         fs.writeFileSync(settingsPath, JSON.stringify(config, null, 2));
-    " -- "$SETTINGS_PATH"
+    " -- "$SETTINGS_PATH" "$CONFIG_FILE"
     echo "✅ Autonomous settings injected into settings.json"
 fi

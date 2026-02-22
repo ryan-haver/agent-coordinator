@@ -7,7 +7,7 @@ metadata:
 
 # Swarm Progress Dashboard
 
-Use the `get_swarm_status` MCP tool provided by `agent-coordinator` to read the current state of the swarm. 
+Use the `get_swarm_status` MCP tool (with `workspace_root` set to the current project root) provided by `agent-coordinator` to read the current state of the swarm. 
 
 If the manifest contains a `## Fusebase` section with a Task Board URL, fetch the task board status using the Fusebase MCP extension (`get_tasks` or equivalent).
 

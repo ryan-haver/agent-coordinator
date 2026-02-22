@@ -506,7 +506,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const wsRoot = resolveWorkspaceRoot(args as any);
             const md = readManifest(wsRoot);
             const agents = getTableFromSection(md, "Agents")?.rows || [];
-            const issues = getTableFromSection(md, "Issues")?.rows || [];
+            const manifestIssues = getTableFromSection(md, "Issues")?.rows || [];
+
+            // Merge per-agent progress files for up-to-date status
+            const agentFiles = readAllAgentProgress(wsRoot);
+            for (const ap of agentFiles) {
+                const row = agents.find(a => a["ID"] === ap.agent_id);
+                if (row) row["Status"] = ap.status;
+            }
+
+            // Merge issues from agent files
+            const agentIssues = agentFiles.flatMap(ap =>
+                ap.issues.map(i => ({ "Severity": i.severity, "File/Area": i.area, "Description": i.description, "Reported By": ap.agent_id }))
+            );
+            const issues = [...manifestIssues, ...agentIssues.filter(ai =>
+                !manifestIssues.some(mi => mi["Description"] === ai["Description"] && mi["Reported By"] === ai["Reported By"])
+            )];
 
             // Phase Gates uses checkbox list, not a markdown table — parse manually
             const gatesMatch = md.match(/## Phase Gates\s*\n+([\s\S]*?)(?:\n##\s|$)/);

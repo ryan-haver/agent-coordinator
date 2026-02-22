@@ -140,7 +140,52 @@ Compare the configured model names against the Antigravity model selector. If mo
 - 🟡 **YELLOW**: Model versions appear outdated — recommend updating `model_fallback.json`
 - 🔴 **RED**: A configured tier model no longer exists in the selector
 
-### 7. Output Report
+### 7. MCP Server Registration
+// turbo
+Verify the agent-coordinator MCP server is properly registered:
+**Windows (PowerShell):**
+```powershell
+$mcpConfig = "$env:USERPROFILE\.gemini\antigravity\mcp_config.json"
+if (Test-Path $mcpConfig) {
+    $cfg = Get-Content $mcpConfig -Raw | ConvertFrom-Json
+    if ($cfg.mcpServers."agent-coordinator") {
+        $scriptPath = $cfg.mcpServers."agent-coordinator".args | Where-Object { $_ -match "index\.js$" }
+        if ($scriptPath -and (Test-Path $scriptPath)) { echo "MCP Server: REGISTERED and binary exists at $scriptPath" }
+        else { echo "MCP Server: REGISTERED but binary NOT FOUND at $scriptPath" }
+    } else { echo "MCP Server: NOT REGISTERED" }
+} else { echo "MCP config not found" }
+```
+**macOS/Linux (Bash):**
+```bash
+MCP_CONFIG="$HOME/.gemini/antigravity/mcp_config.json"
+if [ -f "$MCP_CONFIG" ]; then
+    SCRIPT=$(node -e "const c=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); const s=c.mcpServers['agent-coordinator']; if(s){const p=s.args.find(a=>a.includes('index.js')); console.log(p||'');} else console.log('NOT_REGISTERED');" -- "$MCP_CONFIG")
+    if [ "$SCRIPT" = "NOT_REGISTERED" ]; then echo "MCP Server: NOT REGISTERED"
+    elif [ -f "$SCRIPT" ]; then echo "MCP Server: REGISTERED and binary exists at $SCRIPT"
+    else echo "MCP Server: REGISTERED but binary NOT FOUND at $SCRIPT"; fi
+else echo "MCP config not found"; fi
+```
+- ✅ **GREEN**: Registered AND binary exists
+- 🟡 **YELLOW**: Registered but binary missing (run `npm run build` in the MCP server directory)
+- 🔴 **RED**: Not registered at all
+
+### 8. Fusebase MCP (Optional)
+// turbo
+Check if Fusebase MCP is available (optional — local fallback exists):
+**Windows (PowerShell):**
+```powershell
+$mcpConfig = "$env:USERPROFILE\.gemini\antigravity\mcp_config.json"
+if (Test-Path $mcpConfig) { $cfg = Get-Content $mcpConfig -Raw | ConvertFrom-Json; if ($cfg.mcpServers."fusebase" -or $cfg.mcpServers."fusebase-mcp") { echo "Fusebase MCP: AVAILABLE" } else { echo "Fusebase MCP: NOT CONFIGURED (local swarm-docs/ fallback will be used)" } }
+```
+**macOS/Linux (Bash):**
+```bash
+MCP_CONFIG="$HOME/.gemini/antigravity/mcp_config.json"
+if [ -f "$MCP_CONFIG" ]; then node -e "const c=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); console.log(c.mcpServers.fusebase || c.mcpServers['fusebase-mcp'] ? 'Fusebase MCP: AVAILABLE' : 'Fusebase MCP: NOT CONFIGURED (local swarm-docs/ fallback will be used)');" -- "$MCP_CONFIG"; fi
+```
+- ✅ **GREEN**: Fusebase MCP configured
+- ℹ️ **INFO**: Not configured — agents will use local `swarm-docs/` fallback
+
+### 9. Output Report
 
 Present the results in this format:
 
@@ -159,6 +204,8 @@ Present the results in this format:
 | Agent Prompts          | ✅/🔴    | N templates [status]                 |
 | Fallback Config        | ✅/🔴    | model_fallback.json [status]         |
 | Model Freshness        | ✅/🟡/🔴 | Tier models vs selector [status]     |
+| MCP Server             | ✅/🟡/🔴 | Registration + binary [status]       |
+| Fusebase MCP           | ✅/ℹ️    | Available / fallback mode            |
 | Gitignore Protection   | ✅/🟡    | handoff artifacts [status]           |
 | Active Manifest        | ℹ️      | [clean / active from previous]        |
 ```

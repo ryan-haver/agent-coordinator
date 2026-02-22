@@ -37,7 +37,7 @@ Extract the following from $ARGUMENTS, matching the logic of the standard `/swar
    - YOU MUST run the `auto_mode_toggle` script (located in `~/.gemini/antigravity/skills/agent-coordination/scripts/auto_mode_toggle.[ps1|sh]`) to backup and enable autonomous Antigravity settings.
 4. **Quota Pre-check**: Run `~/.gemini/antigravity/skills/agent-coordination/scripts/quota_check.ps1` (or `.sh` on mac/linux) in the terminal. Read the output `quota_snapshot.json` to get the real-time Cockpit quota percentages.
    - If any core model is < 30%, explicitly auto-route those assignments to fallback models (`model_fallback.json`).
-5. Call MCP tool `create_swarm_manifest` with the `mission` and `supervision_level`, explicitly populating the `## Quota Check` table in the manifest with the metrics you just read from the JSON.
+5. Call MCP tool `create_swarm_manifest` with `mission`, `supervision_level`, and `workspace_root` set to the current project root directory. Explicitly populate the `## Quota Check` table in the manifest with the metrics you just read from the JSON.
 6. Present the swarm plan for confirmation (ONLY IF Level 1 or 2 is used). If Level 3 or 4, proceed immediately.
 
 ```
@@ -53,7 +53,7 @@ Scope:  β=/src/backend/**  γ=/src/frontend/**
 
 ## Step 2: GENERATE ALL PROMPTS
 
-Call MCP `get_agent_prompt` for every single agent defined in your roster. 
+Call MCP `get_agent_prompt` (with `workspace_root`) for every agent defined in your roster. 
 
 If the supervision level is Level 2, 3, or 4 (or if instructed to dispatch in parallel), the branch strategy is:
 - Base branch: `swarm/<slug>`
@@ -87,6 +87,7 @@ Agent: β [Role] | Model: [Model Name]
 
 ## Step 3: COMPLETION / CLEANUP
 
-If `--auto` was used, ensure the final agent (`QA` or `PM`) is instructed to run `auto_mode_toggle --restore` in their prompt to revert the user's Antigravity settings back to normal once the swarm finishes. 
+1. Call MCP `rollup_agent_progress` (with `workspace_root`) for a final merge of all agent progress into the manifest.
+2. If `--auto` was used, ensure the final agent (`QA` or `PM`) is instructed to run `auto_mode_toggle --restore` in their prompt to revert the user's Antigravity settings back to normal once the swarm finishes. 
 
 Since you generated all the prompts up front, your job as the coordinator is done. The human user (or the `--auto` orchestrator) will take it from here.

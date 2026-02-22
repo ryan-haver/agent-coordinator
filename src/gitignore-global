@@ -8,6 +8,9 @@ context_summary_*.md
 # Swarm artifacts
 swarm-manifest.md
 swarm_status.json
+swarm-agent-*.json
+swarm-manifest.md.bak
+swarm-docs/
 
 # Consultation artifacts
 consult_request.md

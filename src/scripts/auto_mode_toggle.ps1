@@ -61,13 +61,29 @@ else {
         Write-Host "Settings backed up to $backupPath" -ForegroundColor Green
     }
 
-    # 2. Inject autonomous overrides
+    # 2. Read settings keys from config (with fallbacks)
+    $configFile = Join-Path $home_ ".antigravity-configs\model_fallback.json"
+    $keyAutoRun = "cascade.autoRunCommands"
+    $keyBackground = "cascade.allowInBackground"
+    $keyApproveEdits = "cascade.autoApproveEdits"
+    if (Test-Path $configFile) {
+        try {
+            $cfg = Get-Content $configFile -Raw | ConvertFrom-Json
+            if ($cfg.auto_mode_settings.keys) {
+                $keyAutoRun = $cfg.auto_mode_settings.keys.auto_run_commands
+                $keyBackground = $cfg.auto_mode_settings.keys.allow_in_background
+                $keyApproveEdits = $cfg.auto_mode_settings.keys.auto_approve_edits
+            }
+        }
+        catch { }
+    }
+
+    # 3. Inject autonomous overrides
     $settings = Read-Settings $settingsPath
     
-    # These keys map to the Agent Extension settings
-    $settings["cascade.autoRunCommands"] = $true
-    $settings["cascade.allowInBackground"] = $true
-    $settings["cascade.autoApproveEdits"] = $true
+    $settings[$keyAutoRun] = $true
+    $settings[$keyBackground] = $true
+    $settings[$keyApproveEdits] = $true
     
     Write-Settings $settings $settingsPath
     Write-Host "Autonomous settings injected into settings.json" -ForegroundColor Green

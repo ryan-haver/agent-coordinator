@@ -39,7 +39,7 @@ Extract the following from $ARGUMENTS:
    - YOU MUST run the `auto_mode_toggle` script (located in `~/.gemini/antigravity/skills/agent-coordination/scripts/auto_mode_toggle.[ps1|sh]`) to backup and enable autonomous Antigravity settings.
 4. **Quota Pre-check**: Run `~/.gemini/antigravity/skills/agent-coordination/scripts/quota_check.ps1` (or `.sh` on mac/linux) in the terminal. Read the output `quota_snapshot.json` to get the real-time Cockpit quota percentages.
    - If any core model is < 30%, explicitly auto-route those assignments to fallback models (`model_fallback.json`).
-5. Call MCP tool `create_swarm_manifest` with the `mission` and `supervision_level`, explicitly populating the `## Quota Check` table in the manifest with the metrics you just read from the JSON.
+5. Call MCP tool `create_swarm_manifest` with `mission`, `supervision_level`, and `workspace_root` set to the current project root directory. Explicitly populate the `## Quota Check` table in the manifest with the metrics you just read from the JSON.
 6. Present the swarm plan to the user:
 
 ```
@@ -68,7 +68,7 @@ For each phase in your plan, do the following:
 
 ### 2a. Dispatch Agents
 For each agent in the current phase:
-1. Call MCP `update_agent_status` to "🔄 Active".
+1. Call MCP `update_agent_status` (with `workspace_root`) to set status to "🔄 Active".
 2. Call MCP `get_agent_prompt` to generate the populated prompt.
 3. If the supervision level is Level 2, 3, or 4 (or if instructing the user to dispatch in parallel), the branch strategy is:
    - Base branch: `swarm/<slug>`
@@ -87,9 +87,9 @@ Model: [Model Name]
 
 **Note on Auto Mode**: If `--auto` is specified, attempt to dispatch agents programmatically if the environment supports it, otherwise present the prompts cleanly for rapid human copy-paste.
 
-### 2b. Await Completion & Verify Gates
-1. You must wait for all agents in the current phase to finish.
-2. Call MCP tool `check_phase_gates` with the current phase number.
+### 2b. Roll Up, Verify Gates & Resolve Issues
+1. Call MCP `rollup_agent_progress` (with `workspace_root`) to merge all per-agent progress files into the manifest.
+2. Call MCP tool `check_phase_gates` (with `workspace_root`) with the current phase number.
 3. If issues (`🔴 CONFLICT`, `🟠 BLOCKED`) are found via `get_swarm_status`:
    - Follow Error Recovery: 1. Auto-Retry → 2. `/consult` → 3. Replace → 4. Escalate to user.
 
@@ -101,8 +101,9 @@ Model: [Model Name]
 
 Once the final phase is complete:
 
-1. Call MCP tool `get_swarm_status` to gather the final state.
-2. If `--auto` was used:
+1. Call MCP `rollup_agent_progress` (with `workspace_root`) for a final merge of all agent progress into the manifest.
+2. Call MCP tool `get_swarm_status` (with `workspace_root`) to gather the final state.
+3. If `--auto` was used:
    - YOU MUST run the `auto_mode_toggle --restore` script to revert the user's Antigravity settings back to normal.
 3. Generate the final Swarm Report:
 

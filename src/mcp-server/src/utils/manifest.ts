@@ -173,7 +173,7 @@ export function readManifest(workspaceRoot: string): string {
     try {
         return fs.readFileSync(manifestPath, 'utf8');
     } catch (e: any) {
-        throw new Error(`Could not read swarm-manifest.md: ${e.message}`);
+        throw new Error(`Could not read swarm-manifest.md at ${manifestPath}. If the project is in a different directory, pass workspace_root as a tool argument. Error: ${e.message}`);
     }
 }
 
