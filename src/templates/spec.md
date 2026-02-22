@@ -13,3 +13,26 @@
 
 ## Out of Scope
 - $EXCLUSION_1
+
+## Knowledge Sources
+<!-- Where agents find reference material and historical context -->
+| Source | Location |
+|--------|----------|
+| NotebookLM Notebook | `$NLM_ALIAS` (ID: `$NLM_NOTEBOOK_ID`) |
+| Historical Projects | Query via `nlm notebook query <alias> "<question>"` |
+
+> [!TIP]
+> Before designing or implementing, query the project notebook for established patterns:
+> `nlm notebook query $NLM_ALIAS "What pattern was used for X?"`
+
+## Deliverables
+<!-- Where agents write their output -->
+| Deliverable | Location |
+|-------------|----------|
+| Spec | Fusebase: `$FUSEBASE_PROJECT_FOLDER` or `swarm-docs/spec.md` |
+| Architecture Plan | Fusebase or `swarm-docs/<agent-id>-plan.md` |
+| Implementation Notes | Fusebase or `swarm-docs/<agent-id>-notes.md` |
+| Test Results | Fusebase or `swarm-docs/<agent-id>-test-results.md` |
+| Review Notes | Fusebase or `swarm-docs/<agent-id>-review.md` |
+| Research Findings | Fusebase or `swarm-docs/<agent-id>-research.md` |
+| Task Board | Fusebase: `$FUSEBASE_TASK_BOARD_URL` |

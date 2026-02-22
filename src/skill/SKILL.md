@@ -144,6 +144,22 @@ The `swarm-manifest.md` file lives in the **project root** and is the single sou
 
 #### Manifest Sections
 
+The `swarm-manifest.md` is the single source of truth for a swarm. Key sections:
+
+| Section | Purpose |
+|---------|---------|
+| `## Mission` | The task objective |
+| `## Mode` | Supervision level and auto-merge settings |
+| `## Quota Check` | Model quota snapshot at swarm start |
+| `## Notebook` | **NotebookLM project notebook** — ID, alias, source limits. Agents query this for context: `nlm notebook query <alias> "<question>"` |
+| `## Fusebase` | **Fusebase deliverables platform** — workspace URL, project folder ID, task board URL. Agents write deliverables here (or to `swarm-docs/` if unavailable) |
+| `## Agents` | Agent assignments with ID, Role, Model, Scope, Status, Phase |
+| `## File Claims` | File-level locking to prevent edit conflicts |
+| `## Phase Gates` | Checkboxes for phase completion verification |
+| `## Handoff Notes` | Inter-agent messages and context transfer |
+| `## Branches` | Git branch tracking per agent |
+| `## Issues` | Bug/conflict/design concern tracker |
+
 | Section | Purpose | Who Writes |
 |---------|---------|------------|
 | `## Mission` | Original user request | `/swarm` workflow |

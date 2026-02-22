@@ -36,7 +36,7 @@ You are operating in a **scoped, speced swarm**. You are trusted to run analysis
 **No CI/CD checkpoint** — you produce a review, not code changes.
 
 ## Documentation
-If Fusebase MCP is available, use it for deliverables. If NOT available, write to `swarm-docs/$AGENT_ID-{document-type}.md`
+Read the manifest `## Fusebase` section for deliverable locations. If Fusebase is configured, use it. Otherwise, write to `swarm-docs/$AGENT_ID-{document-type}.md`. Query the project notebook for context: `nlm notebook query <alias> "<question>"`
 
 ## Your Mission
 $MISSION

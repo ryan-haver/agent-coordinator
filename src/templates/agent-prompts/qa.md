@@ -40,7 +40,7 @@ You are operating in a **scoped, speced swarm**. You are trusted to run tests an
 3. ✅ If you added tests, commit: `git add -A && git commit -m "test($AGENT_ID): <summary>"`
 
 ## Documentation
-If Fusebase MCP is available, use it for deliverables as described below. If Fusebase MCP is NOT available, write your deliverables as local markdown files in a `swarm-docs/` directory using the naming convention: `swarm-docs/$AGENT_ID-{document-type}.md`
+Read the manifest `## Fusebase` section for deliverable locations. If Fusebase is configured, use it. Otherwise, write to `swarm-docs/$AGENT_ID-{document-type}.md`. Query the project notebook for context: `nlm notebook query <alias> "<question>"`
 
 ## Your Mission
 $MISSION

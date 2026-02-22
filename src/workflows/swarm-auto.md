@@ -39,7 +39,9 @@ Extract the following from $ARGUMENTS, matching the logic of the standard `/swar
    - If the output contains `"status": "unavailable"`, skip quota-based routing and use defaults from `model_fallback.json`.
    - Otherwise, if any core model is < 30%, explicitly auto-route those assignments to fallback models (`model_fallback.json`).
 5. Call MCP tool `create_swarm_manifest` with `mission`, `supervision_level`, and `workspace_root` set to the current project root directory. Explicitly populate the `## Quota Check` table in the manifest with the metrics you just read from the JSON.
-6. Present the swarm plan for confirmation (ONLY IF Level 1 or 2 is used). If Level 3 or 4, proceed immediately.
+6. **Create NotebookLM notebook** — `nlm notebook create "Project: <task-slug>"`, set alias, and call MCP `set_manifest_field` to populate `## Notebook`.
+7. **Create Fusebase project** (if available) — create project folder, task board, and placeholder pages. Call MCP `set_manifest_field` to populate `## Fusebase`. If unavailable, agents use `swarm-docs/` fallback.
+8. Present the swarm plan for confirmation (ONLY IF Level 1 or 2 is used). If Level 3 or 4, proceed immediately.
 
 ```
 ⚡ Rapid Swarm for: [task summary]

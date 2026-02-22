@@ -41,7 +41,21 @@ Extract the following from $ARGUMENTS:
    - If the output contains `"status": "unavailable"`, skip quota-based routing and use defaults from `model_fallback.json`.
    - Otherwise, if any core model is < 30%, explicitly auto-route those assignments to fallback models (`model_fallback.json`).
 5. Call MCP tool `create_swarm_manifest` with `mission`, `supervision_level`, and `workspace_root` set to the current project root directory. Explicitly populate the `## Quota Check` table in the manifest with the metrics you just read from the JSON.
-6. Present the swarm plan to the user:
+6. **Create NotebookLM notebook** — set up the project knowledge base:
+   ```
+   nlm notebook create "Project: <task-slug>"
+   nlm notebook set-alias <notebook-id> <task-slug>
+   ```
+   Then call MCP `set_manifest_field` with `section: "Notebook"` and the notebook ID, alias, plan limit, and current sources.
+
+7. **Create Fusebase project** (if Fusebase MCP is available):
+   - Create a Project Folder: `fusebase create_folder "Swarm: <task-slug>"`
+   - Create a Task Board page inside it: `fusebase create_page` with a kanban tracker
+   - Create placeholder pages for: Spec, Architecture Plan, Test Results, Review Notes
+   - Call MCP `set_manifest_field` with `section: "Fusebase"` and the workspace URL, project folder ID, and task board URL
+   - If Fusebase is NOT available, agents will use the local `swarm-docs/` fallback directory
+
+8. Present the swarm plan to the user:
 
 ```
 📋 Swarm Plan for: [task summary]
