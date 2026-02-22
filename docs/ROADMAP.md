@@ -51,7 +51,10 @@ Sourced from [Antigravity Cockpit](https://github.com/jlcodes99/vscode-antigravi
 | **2B** | Fusebase Integration | ✅ Complete | Artifact storage, project docs, task tracking |
 | **3** | Cockpit Quota Awareness | ✅ Complete | Passive quota monitoring |
 | **4** | Direct Quota API | ✅ Complete | Programmatic quota checking |
-| **5** | Advanced Capabilities | Future | Qdrant, marketplace, dashboards |
+| **5** | Advanced Capabilities | Future | Database layer, marketplace, dashboards |
+| **5A** | SpacetimeDB — Working Memory | Future | Real-time sync, shared state, distributed logic |
+| **5B** | Qdrant — Semantic Memory | Future | RAG, code search by meaning, knowledge retrieval |
+| **5C** | TimescaleDB — Telemetry & Logs | Future | Performance analytics, temporal RAG, audit trail |
 
 ---
 
@@ -691,12 +694,336 @@ quota-check.ps1
 
 ## Phase 5: Advanced Capabilities (Future)
 
-### Qdrant RAG (If Needed)
+### Database Architecture Overview
 
-For offline/airgapped environments or massive-scale indexing:
-- Qdrant vector database (self-hosted or cloud)
-- Embedding pipeline for manifests, plans, walkthroughs, KIs
-- Indexing triggers on project completion
+Three specialized databases replace the current file-based coordination with a production-grade data layer:
+
+```mermaid
+graph LR
+    subgraph "Agent Processes"
+        A1["Agent α (PM)"]
+        A2["Agent β (Dev)"]
+        A3["Agent γ (Dev)"]
+        A4["Agent δ (QA)"]
+    end
+
+    subgraph "MCP Server"
+        MCP["Coordination Server"]
+    end
+
+    subgraph "Database Layer"
+        STDB["SpacetimeDB<br/>Working Memory"]
+        QD["Qdrant<br/>Semantic Memory"]
+        TS["TimescaleDB<br/>Telemetry & Logs"]
+    end
+
+    A1 & A2 & A3 & A4 --> MCP
+    MCP --> STDB
+    MCP --> QD
+    MCP --> TS
+```
+
+| Database | Role | Primary Strength | Replaces |
+|----------|------|-----------------|----------|
+| **SpacetimeDB** | Working Memory / Sync | Real-time state and logic; keeping agents in sync | `swarm-manifest.md`, `.manifest-lock`, `swarm_status.json` |
+| **Qdrant** | Long-Term Semantic Memory | RAG, finding code snippets by "meaning" | NotebookLM queries (supplements, doesn't replace) |
+| **TimescaleDB** | Historical Telemetry / Logs | Analyzing agent performance and "Temporal RAG" | `swarm-agent-*.json` progress files, `swarm_events/*.json` |
+
+---
+
+### Phase 5A: SpacetimeDB — Working Memory & Real-Time Sync
+
+Replace file-based manifest coordination with a real-time relational database that supports server-side logic modules.
+
+#### Why SpacetimeDB
+
+| Current Approach | SpacetimeDB |
+|-----------------|-------------|
+| File mutex (`withManifestLock`) for write safety | ACID transactions, no lock files needed |
+| Polling manifest for status changes | Subscription-based — agents get push updates |
+| Markdown table parsing/serialization | Typed relational tables |
+| Single-file bottleneck (`swarm-manifest.md`) | Concurrent reads/writes natively |
+| Stale lock recovery (30s timeout) | No lock files = no stale locks |
+
+#### Data Model
+
+```
+Table: agents
+  id: String (PK)
+  role: String
+  model: String
+  phase: u32
+  scope: String
+  status: String
+  last_updated: Timestamp
+
+Table: file_claims
+  file_path: String (PK)
+  claimed_by: String (FK → agents.id)
+  status: String
+  claimed_at: Timestamp
+
+Table: issues
+  id: u64 (auto)
+  severity: String
+  area: String
+  description: String
+  reported_by: String (FK → agents.id)
+  created_at: Timestamp
+
+Table: phase_gates
+  phase: u32 (PK)
+  complete: bool
+  completed_at: Timestamp?
+
+Table: handoff_notes
+  id: u64 (auto)
+  agent_id: String
+  note: String
+  timestamp: Timestamp
+
+Table: scope_requests
+  id: u64 (auto)
+  agent_id: String
+  file_path: String
+  reason: String
+  status: String  // pending | granted | denied
+  resolved_at: Timestamp?
+```
+
+#### Server-Side Logic (Reducers)
+
+SpacetimeDB supports server-side logic written in Rust or C# that runs atomically:
+
+```
+Reducer: claim_file(agent_id, file_path)
+  → Check file not already claimed
+  → Check agent scope allows this path
+  → Insert claim atomically
+  → No race conditions possible
+
+Reducer: advance_phase(from, to)
+  → Verify all agents in from_phase are terminal
+  → Update phase gate
+  → Notify subscribed agents of phase change
+
+Reducer: complete_swarm()
+  → Final rollup — all in one transaction
+  → Archive to TimescaleDB
+  → Clean up working state
+```
+
+#### Subscription Model
+
+Agents subscribe to real-time updates instead of polling:
+
+```
+Agent β subscribes to:
+  - file_claims WHERE phase = current_phase
+  - issues WHERE severity = 'CONFLICT'
+  - agents WHERE phase = current_phase
+
+When Agent γ claims a file → β gets instant notification
+When PM advances phase → all agents in next phase get notified
+```
+
+#### Migration Path
+
+1. Keep file-based system as fallback during transition
+2. MCP handlers gain a `storage_backend` toggle (`file` | `spacetimedb`)
+3. SpacetimeDB runs locally (embedded) — no infrastructure needed
+4. Manifest import/export for compatibility with existing workflows
+
+#### Deliverables
+
+- SpacetimeDB module with tables and reducers
+- MCP server storage adapter (file ↔ SpacetimeDB)
+- Subscription-based agent notifications
+- Manifest import/export for backward compatibility
+- Local embedded deployment (zero infrastructure)
+
+---
+
+### Phase 5B: Qdrant — Long-Term Semantic Memory
+
+Add vector-based semantic search across all agent outputs, code, and project history.
+
+#### Why Qdrant
+
+| Need | NotebookLM | Qdrant |
+|------|-----------|--------|
+| **"Find code that handles X"** | Natural language Q&A over sources | Vector similarity over embeddings |
+| **Cross-project patterns** | Query one notebook at a time | Single query across all projects |
+| **Code snippet retrieval** | Limited to uploaded sources | Indexes actual codebase |
+| **Offline/airgapped** | Requires Google Cloud | Self-hosted, fully local |
+| **Scale** | 300 sources per notebook | Millions of vectors |
+| **Programmatic** | MCP tool calls | Native API + MCP integration |
+
+> [!NOTE]
+> Qdrant **supplements** NotebookLM, it doesn't replace it. NLM excels at research, web sources, and content generation. Qdrant excels at code search, pattern matching, and cross-project retrieval at scale.
+
+#### What Gets Indexed
+
+| Source | Embedding Strategy | Collection |
+|--------|-------------------|------------|
+| Code files | Per-function/class chunks | `code_snippets` |
+| Specs & plans | Per-section chunks | `project_docs` |
+| Walkthroughs | Full document | `walkthroughs` |
+| Agent handoff notes | Per-note | `agent_notes` |
+| Issues & resolutions | Per-issue with resolution | `issues` |
+| KI artifacts | Full artifact | `knowledge_items` |
+
+#### Use Cases
+
+```
+Developer β: "Find existing code that handles payment validation"
+  → Qdrant searches code_snippets collection
+  → Returns top-5 similar functions with file paths and line numbers
+
+Architect: "Have we solved a similar caching problem before?"
+  → Qdrant searches walkthroughs + issues collections
+  → Returns past approaches with context
+
+PM starting new project: "What patterns apply to API gateway design?"
+  → Qdrant searches across all collections
+  → Returns relevant code, docs, and past decisions
+```
+
+#### Indexing Pipeline
+
+```
+Project completion / swarm end
+  ↓
+Indexing trigger (async, non-blocking)
+  ↓
+Chunking + embedding (local model or API)
+  ↓
+Upsert to Qdrant with metadata
+  (project, agent, phase, timestamp, file_path)
+  ↓
+Available for future queries
+```
+
+#### MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `semantic_search` | Query across all collections | 
+| `index_project` | Trigger indexing for current project |
+| `find_similar_code` | Code-specific similarity search |
+| `find_past_solutions` | Search issues + resolutions |
+
+#### Deliverables
+
+- Qdrant deployment (local Docker or embedded)
+- Embedding pipeline (configurable: local model or API)
+- Chunking strategies per content type
+- 4 new MCP tools for semantic search
+- Indexing triggers on swarm completion
+- Cross-project search in PM workflow
+
+---
+
+### Phase 5C: TimescaleDB — Historical Telemetry & Temporal RAG
+
+Track all agent activity as time-series data for performance analysis, debugging, and "temporal RAG" (asking questions about what happened when).
+
+#### Why TimescaleDB
+
+| Need | Current Approach | TimescaleDB |
+|------|-----------------|-------------|
+| **Agent performance** | Manual observation | Query: avg completion time by model, failure rate by role |
+| **"What happened?"** | Read agent JSON files | SQL over timestamped events |
+| **Cost tracking** | Unknown | Token usage per agent per task |
+| **Trend analysis** | Not possible | Continuous aggregates over weeks/months |
+| **Audit trail** | Files deleted after swarm | Permanent, queryable history |
+
+#### Schema
+
+```sql
+-- Hypertable: agent_events (auto-partitioned by time)
+CREATE TABLE agent_events (
+  time        TIMESTAMPTZ NOT NULL,
+  swarm_id    TEXT NOT NULL,
+  agent_id    TEXT NOT NULL,
+  event_type  TEXT NOT NULL,  -- status_change, file_claim, issue_report, phase_advance, tool_call
+  phase       INT,
+  model       TEXT,
+  detail      JSONB,
+  duration_ms INT
+);
+SELECT create_hypertable('agent_events', 'time');
+
+-- Hypertable: tool_calls (MCP tool invocation telemetry)
+CREATE TABLE tool_calls (
+  time        TIMESTAMPTZ NOT NULL,
+  swarm_id    TEXT NOT NULL,
+  agent_id    TEXT NOT NULL,
+  tool_name   TEXT NOT NULL,
+  args_hash   TEXT,
+  duration_ms INT,
+  success     BOOLEAN,
+  error       TEXT
+);
+SELECT create_hypertable('tool_calls', 'time');
+
+-- Continuous aggregate: model performance (auto-refreshed)
+CREATE MATERIALIZED VIEW model_performance
+WITH (timescaledb.continuous) AS
+SELECT
+  time_bucket('1 hour', time) AS bucket,
+  model,
+  COUNT(*) AS total_events,
+  AVG(duration_ms) AS avg_duration,
+  COUNT(*) FILTER (WHERE event_type = 'status_change' AND detail->>'status' ILIKE '%Failed%') AS failures
+FROM agent_events
+GROUP BY bucket, model;
+```
+
+#### Temporal RAG
+
+Ask questions about historical agent behavior:
+
+```
+"Which model has the highest success rate for debugging tasks?"
+  → Query model_performance WHERE role = 'Debugger' ORDER BY failure_rate ASC
+
+"How long do Phase 2 implementations typically take?"
+  → Query agent_events WHERE event_type = 'phase_advance' AND phase = 2
+
+"What went wrong in the last 3 failed swarms?"
+  → Query agent_events WHERE event_type = 'status_change' AND detail->>'status' ILIKE '%Failed%'
+  → Join with tool_calls for error context
+```
+
+#### Dashboard Queries
+
+| Metric | Query |
+|--------|-------|
+| Avg swarm duration | `SELECT AVG(duration) FROM swarm_runs` |
+| Model failure rate | `SELECT model, COUNT(*) FILTER (WHERE NOT success) / COUNT(*) FROM tool_calls GROUP BY model` |
+| Busiest agent roles | `SELECT role, COUNT(*) FROM agent_events GROUP BY role ORDER BY count DESC` |
+| File conflict hotspots | `SELECT detail->>'file_path', COUNT(*) FROM agent_events WHERE event_type = 'issue_report' AND detail->>'severity' LIKE '%CONFLICT%' GROUP BY 1` |
+
+#### MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `query_telemetry` | SQL-like queries over agent history |
+| `get_model_stats` | Model performance summary |
+| `get_swarm_history` | Past swarm runs with outcomes |
+| `compare_models` | Head-to-head model comparison for a role |
+
+#### Deliverables
+
+- TimescaleDB deployment (local Docker)
+- Event ingestion from MCP server (emit on every tool call)
+- Continuous aggregates for model/role performance
+- 4 new MCP tools for telemetry queries
+- Temporal RAG integration with PM workflow
+- Dashboard-ready query library
+
+---
 
 ### Cockpit Extension Enhancements
 
@@ -709,3 +1036,4 @@ For offline/airgapped environments or massive-scale indexing:
 - Community-contributed agent roles
 - Domain-specific presets (ML, DevOps, frontend, data engineering)
 - Agent prompt versioning and testing
+
