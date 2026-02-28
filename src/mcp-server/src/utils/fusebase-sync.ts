@@ -30,7 +30,11 @@ export interface PendingLog {
 const PENDING_FILENAME = '.fusebase-pending.json';
 
 function pendingLogPath(workspaceRoot: string): string {
-    return path.join(workspaceRoot, 'swarm-docs', PENDING_FILENAME);
+    const dir = path.join(workspaceRoot, 'swarm-docs');
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+    return path.join(dir, PENDING_FILENAME);
 }
 
 /**
