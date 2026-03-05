@@ -195,3 +195,45 @@ Fusebase provides **persistent artifact storage** and collaboration. Agents dual
 |-------|-------------------|
 | **Local files** | Agents (always available, grep-able) |
 | **Fusebase pages** | Humans (rich UI, comments, @mentions) |
+
+### Agent Accounts (Phase 2C)
+
+Give each agent its own Fusebase identity so comments, edits, and @mentions are attributable.
+
+**Setup:**
+1. Create a Fusebase account for each agent role (e.g., `agent-pm@yourdomain.com`)
+2. Authenticate each profile in `fusebase-mcp`:
+   ```bash
+   cd fusebase-mcp
+   npx tsx scripts/auth.ts --profile=agent-pm
+   npx tsx scripts/auth.ts --profile=agent-architect
+   npx tsx scripts/auth.ts --profile=agent-dev
+   # ... repeat for each role
+   ```
+3. Edit `src/fusebase_accounts.json` to map roles to profiles:
+   ```json
+   {
+     "fusebase_profiles": {
+       "project-manager": { "profile": "agent-pm", "display_name": "🎯 Agent PM" },
+       "developer": { "profile": "agent-dev", "display_name": "💻 Agent Dev" }
+     }
+   }
+   ```
+4. Re-run `install.ps1` to deploy the config
+
+**Default role→profile mapping:**
+
+| Role | Profile | Display Name |
+|------|---------|-------------|
+| project-manager | `agent-pm` | 🎯 Agent PM |
+| architect | `agent-architect` | 🏗️ Agent Architect |
+| developer | `agent-dev` | 💻 Agent Dev |
+| debugger | `agent-debug` | 🐛 Agent Debug |
+| qa | `agent-qa` | 🧪 Agent QA |
+| code-reviewer | `agent-review` | 🔍 Agent Review |
+| devops | `agent-devops` | ⚙️ Agent DevOps |
+| explorer | `agent-explorer` | 🔭 Agent Explorer |
+| researcher | `agent-researcher` | 📚 Agent Researcher |
+
+> **Note:** Agent accounts are optional. If no profile is configured for a role, the system gracefully falls back to the user's default cookie.
+

@@ -105,6 +105,11 @@ mkdir -p "$CFG_DST/rules" "$CFG_DST/templates/agent-prompts"
 cp "$SRC/model_fallback.json" "$CFG_DST/model_fallback.json"
 echo "  ✅ Config: model_fallback.json"
 
+if [ -f "$SRC/fusebase_accounts.json" ]; then
+    cp "$SRC/fusebase_accounts.json" "$CFG_DST/fusebase_accounts.json"
+    echo "  ✅ Config: fusebase_accounts.json"
+fi
+
 # Templates (handoff + swarm manifests + spec)
 for tmpl in handoff_manifest.md swarm-manifest.md spec.md; do
     if [ -f "$SRC/templates/$tmpl" ]; then

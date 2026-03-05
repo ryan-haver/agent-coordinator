@@ -106,6 +106,12 @@ New-Item -ItemType Directory -Force -Path "$cfgDst\rules", "$cfgDst\templates\ag
 Copy-Item (Join-Path $src "model_fallback.json") "$cfgDst\model_fallback.json" -Force
 Write-Host "  Config: model_fallback.json" -ForegroundColor Green
 
+$fbAccounts = Join-Path $src "fusebase_accounts.json"
+if (Test-Path $fbAccounts) {
+    Copy-Item $fbAccounts "$cfgDst\fusebase_accounts.json" -Force
+    Write-Host "  Config: fusebase_accounts.json" -ForegroundColor Green
+}
+
 # Templates (handoff + swarm manifests + spec)
 foreach ($tmpl in @("handoff_manifest.md", "swarm-manifest.md", "spec.md")) {
     $tmplSrc = Join-Path $src "templates\$tmpl"

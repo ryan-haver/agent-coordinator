@@ -32,8 +32,16 @@ Auto-merge: false
 | Field | Value/URL |
 |-------|-----------|
 | Workspace URL | |
+| Workspace ID | |
 | Project Folder ID | |
 | Task Board URL | |
+
+## Fusebase Pages
+<!-- PM: Add each created page here so agents can find noteIds for commenting -->
+<!-- Agents: Read workspaceId above + noteId below when calling comment tools -->
+
+| Page Title | Note ID | Created By |
+|------------|---------|------------|
 
 ## Agents
 <!-- Agents will be listed here by the /swarm workflow -->

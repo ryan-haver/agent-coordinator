@@ -1,0 +1,71 @@
+{
+    "fusebase_profiles": {
+        "project-manager": {
+            "profile": "agent-pm",
+            "email": "coordinationagents+pm@gmail.com",
+            "display_name": "🎯 Agent PM",
+            "description": "Project coordination, specs, reports"
+        },
+        "architect": {
+            "profile": "agent-architect",
+            "email": "coordinationagents+architect@gmail.com",
+            "display_name": "🏗️ Agent Architect",
+            "description": "Architecture design, trade-off analysis"
+        },
+        "developer": {
+            "profile": "agent-dev",
+            "email": "coordinationagents+dev@gmail.com",
+            "display_name": "💻 Agent Dev",
+            "description": "Implementation, coding, testing"
+        },
+        "developer-β": {
+            "profile": "agent-dev-beta",
+            "email": "coordinationagents+dev-beta@gmail.com",
+            "display_name": "💻 Agent Dev β",
+            "description": "Secondary developer instance"
+        },
+        "developer-γ": {
+            "profile": "agent-dev-gamma",
+            "email": "coordinationagents+dev-gamma@gmail.com",
+            "display_name": "💻 Agent Dev γ",
+            "description": "Tertiary developer instance"
+        },
+        "debugger": {
+            "profile": "agent-debug",
+            "email": "coordinationagents+debug@gmail.com",
+            "display_name": "🐛 Agent Debug",
+            "description": "Root cause analysis, bug fixes"
+        },
+        "qa": {
+            "profile": "agent-qa",
+            "email": "coordinationagents+qa@gmail.com",
+            "display_name": "🧪 Agent QA",
+            "description": "Test execution, verification"
+        },
+        "code-reviewer": {
+            "profile": "agent-review",
+            "email": "coordinationagents+review@gmail.com",
+            "display_name": "🔍 Agent Review",
+            "description": "Code quality, security review"
+        },
+        "devops": {
+            "profile": "agent-devops",
+            "email": "coordinationagents+devops@gmail.com",
+            "display_name": "⚙️ Agent DevOps",
+            "description": "Build, deploy, CI/CD"
+        },
+        "explorer": {
+            "profile": "agent-explorer",
+            "email": "coordinationagents+explorer@gmail.com",
+            "display_name": "🔭 Agent Explorer",
+            "description": "Codebase scanning, dependency mapping"
+        },
+        "researcher": {
+            "profile": "agent-researcher",
+            "email": "coordinationagents+researcher@gmail.com",
+            "display_name": "📚 Agent Researcher",
+            "description": "Web research, documentation"
+        }
+    },
+    "_comment": "Map agent roles to Fusebase profiles. Run 'npx tsx scripts/auth.ts --profile=<profile>' in fusebase-mcp to authenticate each."
+}

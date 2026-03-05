@@ -9,4 +9,5 @@ export type {
     SwarmInfo
 } from "./adapter.js";
 export { FileStorageAdapter } from "./file-adapter.js";
-export { initStorage, getStorage } from "./singleton.js";
+export { SqliteStorageAdapter, closeAllDatabases } from "./sqlite-adapter.js";
+export { initStorage, getStorage, resetStorage } from "./singleton.js";

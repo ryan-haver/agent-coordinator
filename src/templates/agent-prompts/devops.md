@@ -68,6 +68,19 @@ You have expert knowledge but **you can make mistakes and may lack current infor
 ## Your Mission
 $MISSION
 
+## Fusebase Communication (Agent Accounts)
+If a Fusebase profile is configured, your identity is `$PROFILE`.
+
+**How to find IDs:** Read `workspaceId` from manifest `## Fusebase` and page `noteId` from `## Fusebase Pages`.
+
+**On start:** `fusebase_poll_mentions(workspaceId, profile: "$PROFILE")` — check for user/agent comments
+**Before marking complete:** `fusebase_poll_mentions(profile: "$PROFILE")` — check for last-minute feedback
+**When delivering work:** `fusebase_post_comment(workspaceId, noteId, "<summary>", profile: "$PROFILE")` — notify reviewers
+**When someone comments on your work:** `fusebase_reply_comment(workspaceId, threadId, "<response>", profile: "$PROFILE")`
+**After addressing feedback:** `fusebase_resolve_thread(workspaceId, threadId, profile: "$PROFILE")`
+
+If `$PROFILE` is empty, skip Fusebase communication — the system falls back gracefully.
+
 ## Before You Start
 1. Call `update_agent_status` to set yourself to `🔄 Active`
 2. Read `swarm-manifest.md` in the project root

@@ -66,6 +66,19 @@ Query the project notebook: `nlm notebook query <alias> "<question>"`
 ## Your Mission
 $MISSION
 
+## Fusebase Communication (Agent Accounts)
+If `fusebase_accounts.json` is deployed, each agent has its own Fusebase identity. Your profile is `$PROFILE`.
+
+**How to find IDs:** Read `workspaceId` from manifest `## Fusebase` and page `noteId` from `## Fusebase Pages`.
+
+**On start:** `fusebase_poll_mentions(workspaceId, profile: "$PROFILE")` — check for user comments since last session
+**At phase gates:** `fusebase_poll_mentions(workspaceId, profile: "$PROFILE")` — check for last-minute feedback before advancing
+**After posting spec/report:** `fusebase_post_comment(workspaceId, noteId, "@user Spec ready for review", profile: "$PROFILE")` — request user review
+**When user comments:** `fusebase_reply_comment(workspaceId, threadId, "<response>", profile: "$PROFILE")` — respond to feedback
+**After addressing feedback:** `fusebase_resolve_thread(workspaceId, threadId, profile: "$PROFILE")` — close the thread
+
+If `$PROFILE` is empty, skip Fusebase communication — the system falls back gracefully.
+
 ## Before You Start
 1. Call `update_agent_status` to set yourself to `🔄 Active`
 2. Read `swarm-manifest.md` in the project root
@@ -90,7 +103,8 @@ $MISSION
    - Create a Project Folder: `fusebase create_folder "Swarm: <task-slug>"`
    - Create a Task Board page with task items mapped to agent IDs
    - Create placeholder pages: Spec, Architecture Plan, Test Results, Review Notes
-   - Call MCP `set_manifest_field` with `section: "Fusebase"` to populate the manifest
+   - Call MCP `set_manifest_field` with `section: "Fusebase"` to populate the manifest (include Workspace ID)
+   - **Record each page's `noteId`** in the manifest `## Fusebase Pages` table so other agents can find them for commenting
    - If Fusebase is NOT available, create `swarm-docs/` directory for local deliverables
 
 4. **Write `spec.md`** using the template at `~/.antigravity-configs/templates/spec.md`:

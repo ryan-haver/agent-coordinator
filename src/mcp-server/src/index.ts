@@ -13,7 +13,7 @@ import {
     ListResourcesRequestSchema,
     ReadResourceRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
-import { readManifest } from "./utils/manifest.js";
+import { initStorage, getStorage } from "./storage/singleton.js";
 import path from "path";
 import os from "os";
 import fs from "fs";
@@ -70,7 +70,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     if (request.params.uri === "manifest://current") {
         try {
             const wsRoot = resolveWorkspaceRoot();
-            const content = readManifest(wsRoot);
+            const content = getStorage().readManifest(wsRoot);
             return {
                 contents: [{ uri: request.params.uri, mimeType: "text/markdown", text: content }]
             };
@@ -119,6 +119,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<any> =>
 // ── Main ───────────────────────────────────────────────────────────────
 
 async function main() {
+    const backend = process.env.STORAGE_BACKEND || "file";
+    initStorage(backend);
+    console.error(`[agent-coordinator] Storage backend: ${backend}`);
+
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error("Agent Coordinator MCP server running on stdio");

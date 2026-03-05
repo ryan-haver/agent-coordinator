@@ -49,7 +49,7 @@ Sourced from [Antigravity Cockpit](https://github.com/jlcodes99/vscode-antigravi
 | **1C** | Enhanced Operations | ✅ Complete | Supervision, autonomy, presets |
 | **2A** | NotebookLM Integration | ✅ Complete | Research & persistent knowledge |
 | **2B** | Fusebase Integration | ✅ Complete | Dual-write deliverables, kanban tracking, tagging |
-| **2C** | Fusebase Agent Accounts | Future | @mentions, comments, human↔agent communication |
+| **2C** | Fusebase Agent Accounts | ✅ Complete | @mentions, comments, human↔agent communication |
 | **3** | Cockpit Quota Awareness | ✅ Complete | Passive quota monitoring |
 | **4** | Direct Quota API | ✅ Complete | Programmatic quota checking |
 | **5** | Advanced Capabilities | Future | Database layer, marketplace, dashboards |
