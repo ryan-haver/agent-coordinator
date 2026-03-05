@@ -14,6 +14,7 @@ import {
     ReadResourceRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
 import { initStorage, getStorage } from "./storage/singleton.js";
+import { initTelemetry, getTelemetry, summarizeArgs } from "./telemetry/client.js";
 import path from "path";
 import os from "os";
 import fs from "fs";
@@ -100,14 +101,40 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 server.setRequestHandler(CallToolRequestSchema, async (request): Promise<any> => {
     const { name, arguments: args } = request.params;
+    const safeArgs = (args as Record<string, unknown>) || {};
+    const start = Date.now();
 
     try {
         const handler = TOOL_HANDLERS[name];
         if (!handler) {
             throw new Error(`Unknown tool: ${name}`);
         }
-        return await handler((args as Record<string, unknown>) || {});
+        const result = await handler(safeArgs);
+        const duration = Date.now() - start;
+
+        getTelemetry()?.record({
+            tool_name: name,
+            agent_id: String(safeArgs.agent_id ?? ""),
+            phase: String(safeArgs.phase ?? ""),
+            workspace: String(safeArgs.workspace_root ?? ""),
+            duration_ms: duration,
+            success: true,
+            args_summary: summarizeArgs(safeArgs)
+        });
+
+        return result;
     } catch (error: any) {
+        const duration = Date.now() - start;
+        getTelemetry()?.record({
+            tool_name: name,
+            agent_id: String(safeArgs.agent_id ?? ""),
+            phase: String(safeArgs.phase ?? ""),
+            workspace: String(safeArgs.workspace_root ?? ""),
+            duration_ms: duration,
+            success: false,
+            error_msg: String(error.message ?? "").slice(0, 500),
+            args_summary: summarizeArgs(safeArgs)
+        });
         return {
             toolResult: `Error executing tool: ${error.message}`,
             content: [{ type: "text" as const, text: `Error: ${error.message}` }],
@@ -122,6 +149,15 @@ async function main() {
     const backend = process.env.STORAGE_BACKEND || "file";
     initStorage(backend);
     console.error(`[agent-coordinator] Storage backend: ${backend}`);
+
+    // Init telemetry (soft dependency — no-ops if TSDB_URL not set)
+    const wsRoot = resolveWorkspaceRoot();
+    const telemetry = initTelemetry(wsRoot, "");
+    console.error(`[agent-coordinator] Telemetry: ${process.env.TSDB_URL ? "enabled" : "local-only"}`);
+
+    // Graceful shutdown
+    process.on("SIGINT", () => { telemetry.shutdown().finally(() => process.exit(0)); });
+    process.on("SIGTERM", () => { telemetry.shutdown().finally(() => process.exit(0)); });
 
     const transport = new StdioServerTransport();
     await server.connect(transport);

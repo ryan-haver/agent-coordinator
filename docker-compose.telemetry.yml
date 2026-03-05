@@ -1,0 +1,22 @@
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: agent-coordinator-tsdb
+    environment:
+      POSTGRES_DB: telemetry
+      POSTGRES_USER: coordinator
+      POSTGRES_PASSWORD: ${TSDB_PASSWORD:-coordinator_dev}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - agent_coordinator_tsdb_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "coordinator", "-d", "telemetry"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  agent_coordinator_tsdb_data:
+    name: agent_coordinator_tsdb_data

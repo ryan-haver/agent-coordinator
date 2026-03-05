@@ -1,31 +1,39 @@
-# Proxy Relay — Finish Summary
+# Milestone 2: SQLite Storage Backend — Finish Summary
 
-## Changes Made
+## Verification Commands + Results
 
-### New files
-- `src/proxy-relay.ts` — HTTP CONNECT proxy with manual SOCKS5 upstream handshake (IPv4-only)
-- `scripts/test-relay.ts` — Standalone relay verification script
+| Command | Result |
+| ------- | ------ |
+| `npx tsc --noEmit` | ✅ Clean compile |
+| `npm test` | ✅ 56/56 pass (3 test files) |
 
-### Modified files
-- `src/client.ts` — Added `SocksProxyAgent` for API call proxying
-- `src/crypto.ts` — Added `host` to `CredentialStore`
-- `src/index.ts` — Loads proxy config and passes `proxyUrl` to client
-- `scripts/auth.ts` — Starts relay, passes `--proxy-server` flag to Chromium, loads host from store
-- `scripts/setup-credentials.mjs` — Added Fusebase host prompt (default: `inkabeam.nimbusweb.me`)
+## Summary of Changes
 
-### Dependencies
-- `socks@2.8.7` + `socks-proxy-agent@8.0.5` (used for API-level proxying in `client.ts`)
+| File | Lines | Purpose |
+| ---- | ----- | ------- |
+| `src/storage/schema.ts` | 114 | DDL for 9 workspace + 1 global table |
+| `src/storage/migrations.ts` | 62 | Version-tracked migration runner |
+| `src/storage/sqlite-adapter.ts` | 453 | All 30 StorageAdapter methods |
+| `src/storage/migrate.ts` | 171 | File→SQLite one-shot migration CLI |
+| `src/storage/singleton.ts` | 47 | `STORAGE_BACKEND=sqlite` env var support |
+| `src/storage/index.ts` | 14 | Updated barrel exports |
+| `src/index.ts` | 135 | `initStorage()` at startup |
+| `tests/sqlite-adapter.test.ts` | 282 | 35 integration tests |
+| `package.json` | +2 deps | `better-sqlite3`, `@types/better-sqlite3` |
 
-## Verification Results
-- ✅ `test-relay.ts` → PIA Netherlands IP `109.201.152.164`
-- ✅ Auth through relay → 12 cookies captured for `agent-pm`
-- ✅ Auth without proxy → 13 cookies captured (baseline)
-- ✅ `npx tsc` — clean build
+## Commits
 
-## Key Design Decision
-The `socks` npm package cannot connect to PIA's SOCKS5 proxy (IPv6 issue). Instead of debugging the package, the relay implements the SOCKS5 handshake manually with forced IPv4 connections (`net.connect({ family: 4 })`).
+- `def3b34` — feat(phase5): Milestone 2 — SQLite Storage Backend
 
 ## Follow-ups
-1. Run `node scripts/auth-all.mjs` to batch-auth all 11 agents through the proxy
-2. Note: `socks-proxy-agent` in `client.ts` may also fail for the same IPv6 reason — may need to switch API proxying to use the relay too, or implement a custom HTTP agent
-3. Non-critical DNS: `browser-intake-datadoghq.com` and `stt.nimbusweb.me` fail to resolve (telemetry domains — harmless)
+
+- [ ] Step 2.7: Update install scripts and docs (deferred — minor)
+- [ ] `.swarm/` → add to `.gitignore` template
+- [ ] Production stress test with concurrent agents
+- [ ] Consider `STORAGE_BACKEND` config in MCP server config JSON (not just env var)
+
+## Manual Validation Steps
+
+1. `STORAGE_BACKEND=sqlite npm run start` — verify server starts with SQLite
+2. Run a swarm with `STORAGE_BACKEND=sqlite`, verify DB created at `{wsRoot}/.swarm/coordinator.db`
+3. Test migration: create a file-based swarm, run `node build/storage/migrate.js --workspace .`, verify DB contents

@@ -40,6 +40,9 @@ import { handleLogFusebasePending, handleSyncFusebasePending, handleGetFusebaseS
 // Scope handlers
 import { handleRequestScopeExpansion, handleGrantScopeExpansion, handleDenyScopeExpansion } from "./scope.js";
 
+// Telemetry handlers
+import { handleGetMyTelemetry, handleGetSessionTelemetry, handleGetSlowOperations, handleGetTelemetrySummary } from "./telemetry.js";
+
 /**
  * Master tool handler map: tool name → handler function.
  * The index.ts router uses this to dispatch tool calls.
@@ -97,4 +100,10 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
     request_scope_expansion: handleRequestScopeExpansion,
     grant_scope_expansion: handleGrantScopeExpansion,
     deny_scope_expansion: handleDenyScopeExpansion,
+
+    // Telemetry
+    get_my_telemetry: handleGetMyTelemetry,
+    get_session_telemetry: handleGetSessionTelemetry,
+    get_slow_operations: handleGetSlowOperations,
+    get_telemetry_summary: handleGetTelemetrySummary,
 };

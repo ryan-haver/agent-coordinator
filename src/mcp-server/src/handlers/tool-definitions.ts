@@ -443,5 +443,52 @@ export const TOOL_DEFINITIONS = [
                 workspace_root: { type: "string", description: "Optional workspace root override" }
             }
         }
+    },
+
+    // ── Telemetry ──────────────────────────────────────────────────────
+    {
+        name: "get_my_telemetry",
+        description: "Returns your recent tool calls for the current session. Use this to reconstruct what you did, identify slow operations, or review your activity timeline.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                agent_id: { type: "string", description: "Your agent ID" },
+                session_id: { type: "string", description: "Optional session ID filter" },
+                limit: { type: "number", description: "Max rows to return (default 50, max 200)" }
+            },
+            required: ["agent_id"]
+        }
+    },
+    {
+        name: "get_session_telemetry",
+        description: "Returns aggregated telemetry for all agents in a session: call counts, average durations, failure rates. Use for swarm health checks.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                session_id: { type: "string", description: "Session ID to query (omit for all sessions)" }
+            }
+        }
+    },
+    {
+        name: "get_slow_operations",
+        description: "Returns tool calls that exceeded a duration threshold. Use to identify bottlenecks or runaway operations.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                threshold_ms: { type: "number", description: "Duration threshold in ms (default 2000)" },
+                session_id: { type: "string", description: "Optional session ID filter" },
+                limit: { type: "number", description: "Max rows (default 20, max 100)" }
+            }
+        }
+    },
+    {
+        name: "get_telemetry_summary",
+        description: "Returns a high-level swarm telemetry summary: total calls, avg duration, failure rate, top tools. Falls back to local SQLite when TimescaleDB is offline.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                session_id: { type: "string", description: "Optional session ID filter" }
+            }
+        }
     }
 ];

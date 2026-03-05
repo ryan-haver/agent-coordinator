@@ -6,7 +6,7 @@
  *   2. Global DB     (~/.antigravity-configs/coordinator-global.db) — cross-workspace registry
  */
 
-export const WORKSPACE_SCHEMA_VERSION = 1;
+export const WORKSPACE_SCHEMA_VERSION = 2;
 export const GLOBAL_SCHEMA_VERSION = 1;
 
 // ── Workspace DB tables ──────────────────────────────────────────────
@@ -81,11 +81,23 @@ CREATE TABLE IF NOT EXISTS events (
     session_id TEXT NOT NULL DEFAULT ''
 );
 
-CREATE INDEX IF NOT EXISTS idx_file_claims_file ON file_claims(file);
-CREATE INDEX IF NOT EXISTS idx_file_claims_agent ON file_claims(agent_id);
-CREATE INDEX IF NOT EXISTS idx_agent_issues_agent ON agent_issues(agent_id);
-CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
-CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
+CREATE TABLE IF NOT EXISTS telemetry_buffer (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts           TEXT    NOT NULL DEFAULT (datetime('now')),
+    session_id   TEXT    NOT NULL DEFAULT '',
+    workspace    TEXT    NOT NULL DEFAULT '',
+    agent_id     TEXT    NOT NULL DEFAULT '',
+    tool_name    TEXT    NOT NULL,
+    phase        TEXT    NOT NULL DEFAULT '',
+    duration_ms  INTEGER NOT NULL DEFAULT 0,
+    success      INTEGER NOT NULL DEFAULT 1,
+    error_msg    TEXT    NOT NULL DEFAULT '',
+    args_summary TEXT    NOT NULL DEFAULT '',
+    synced       INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_telemetry_unsynced ON telemetry_buffer(synced);
+CREATE INDEX IF NOT EXISTS idx_telemetry_session ON telemetry_buffer(session_id);
+CREATE INDEX IF NOT EXISTS idx_telemetry_agent ON telemetry_buffer(agent_id);
 `;
 
 // ── Global DB tables ─────────────────────────────────────────────────
