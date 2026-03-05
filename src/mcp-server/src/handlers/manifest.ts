@@ -1,33 +1,24 @@
 /**
  * Manifest tool handlers: create_swarm_manifest, read_manifest_section, set_manifest_field
+ *
+ * Uses StorageAdapter for all manifest I/O.
  */
 import path from "path";
 import fs from "fs";
 import { resolveWorkspaceRoot, globalConfigPath, type ToolResponse } from "./context.js";
+import { getStorage } from "../storage/singleton.js";
 import {
     getTableFromSection,
     replaceTableInSection,
-    serializeTableToString,
-    readManifest,
-    writeManifest,
-    withManifestLock
+    serializeTableToString
 } from "../utils/manifest.js";
-import {
-    cleanupAgentFiles,
-    extractSessionId,
-    generateSessionId,
-    readAllAgentProgress
-} from "../utils/agent-progress.js";
-import {
-    registerSwarm,
-    cleanupStaleEvents
-} from "../utils/swarm-registry.js";
-import { writeSwarmStatus } from "./shared.js";
+import { cleanupStaleEvents } from "../utils/swarm-registry.js";
 
 export async function handleCreateSwarmManifest(args: Record<string, unknown>): Promise<ToolResponse> {
     const mission = args?.mission;
     if (!mission || typeof mission !== "string") throw new Error("Missing required argument: mission");
     const supervision = (args?.supervision_level as string) || "Full";
+    const storage = getStorage();
 
     const templatePath = path.join(globalConfigPath, "templates", "swarm-manifest.md");
     if (!fs.existsSync(templatePath)) throw new Error("Template not found");
@@ -38,19 +29,17 @@ export async function handleCreateSwarmManifest(args: Record<string, unknown>): 
     content = content.replace(/Supervision:\s*\w+/, `Supervision: ${supervision}`);
 
     const wsRoot = resolveWorkspaceRoot(args);
-
-    const sessionId = generateSessionId();
+    const sessionId = storage.generateSessionId();
     content = `<!-- session: ${sessionId} -->\n` + content;
 
-    const cleaned = cleanupAgentFiles(wsRoot);
-
+    const cleaned = storage.cleanupAgentFiles(wsRoot);
     try { cleanupStaleEvents(7); } catch { /* non-fatal */ }
 
-    writeManifest(wsRoot, content);
-    writeSwarmStatus(wsRoot, content, "Swarm initialized");
+    storage.writeManifest(wsRoot, content);
+    storage.writeSwarmStatus(wsRoot, "Swarm initialized");
 
     try {
-        await registerSwarm({
+        await storage.registerSwarm({
             workspace: wsRoot,
             session_id: sessionId,
             mission: mission.substring(0, 200),
@@ -69,7 +58,8 @@ export async function handleCreateSwarmManifest(args: Record<string, unknown>): 
 
 export async function handleReadManifestSection(args: Record<string, unknown>): Promise<ToolResponse> {
     const wsRoot = resolveWorkspaceRoot(args);
-    const md = readManifest(wsRoot);
+    const storage = getStorage();
+    const md = storage.readManifest(wsRoot);
     const section = args?.section;
     if (!section || typeof section !== "string") throw new Error("Missing required argument: section");
     const res = getTableFromSection(md, section);
@@ -81,8 +71,9 @@ export async function handleSetManifestField(args: Record<string, unknown>): Pro
     const { section, rows } = args as any;
     if (!section || !rows) throw new Error("Missing required arguments: section, rows");
     const wsRoot = resolveWorkspaceRoot(args);
+    const storage = getStorage();
 
-    const resultText = await withManifestLock(wsRoot, (md) => {
+    const resultText = await storage.withManifestLock(wsRoot, (md) => {
         const table = getTableFromSection(md, section);
         if (table) {
             const headers = rows.length > 0 ? Object.keys(rows[0]) : table.headers;

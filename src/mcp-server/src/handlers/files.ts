@@ -1,41 +1,31 @@
 /**
  * File claim tool handlers: claim_file, check_file_claim, release_file_claim
+ *
+ * Uses StorageAdapter for manifest reads and agent progress operations.
+ * Scope enforcement and lock-file logic remain in the handler (business logic).
  */
 import path from "path";
 import fs from "fs";
 import { resolveWorkspaceRoot, type ToolResponse } from "./context.js";
-import {
-    getTableFromSection,
-    readManifest
-} from "../utils/manifest.js";
-import {
-    readAgentProgress,
-    writeAgentProgress,
-    createAgentProgress,
-    readAllAgentProgress,
-    extractSessionId
-} from "../utils/agent-progress.js";
+import { getStorage } from "../storage/singleton.js";
+import { getTableFromSection } from "../utils/manifest.js";
 
 export async function handleClaimFile(args: Record<string, unknown>): Promise<ToolResponse> {
     const agent_id = args?.agent_id as string;
     const file_path = args?.file_path as string;
     if (!agent_id || !file_path) throw new Error("Missing required arguments: agent_id, file_path");
     const wsRoot = resolveWorkspaceRoot(args);
+    const storage = getStorage();
 
     // Enforce scope checking
-    const md0 = readManifest(wsRoot);
-    const agentsTable0 = getTableFromSection(md0, "Agents");
-    if (agentsTable0) {
-        const agentRow = agentsTable0.rows.find(r => r["ID"] === agent_id);
-        if (agentRow && agentRow["Scope"]) {
-            const scope = agentRow["Scope"].trim();
-            const normalizedFile = file_path.replace(/\\/g, '/');
-            const normalizedScope = scope.replace(/\\/g, '/');
-            const scopeParts = normalizedScope.split(',').map((s: string) => s.trim());
-            const inScope = scopeParts.some((s: string) => normalizedFile.startsWith(s) || s === '*' || s === 'all');
-            if (!inScope) {
-                throw new Error(`File ${file_path} is outside agent ${agent_id}'s scope (${scope}). Use request_scope_expansion to request access.`);
-            }
+    const agent = storage.getAgent(wsRoot, agent_id);
+    if (agent && agent.scope) {
+        const normalizedFile = file_path.replace(/\\/g, '/');
+        const normalizedScope = agent.scope.replace(/\\/g, '/');
+        const scopeParts = normalizedScope.split(',').map((s: string) => s.trim());
+        const inScope = scopeParts.some((s: string) => normalizedFile.startsWith(s) || s === '*' || s === 'all');
+        if (!inScope) {
+            throw new Error(`File ${file_path} is outside agent ${agent_id}'s scope (${agent.scope}). Use request_scope_expansion to request access.`);
         }
     }
 
@@ -49,9 +39,9 @@ export async function handleClaimFile(args: Record<string, unknown>): Promise<To
     }
 
     try {
-        const md = readManifest(wsRoot);
-        const sessionIdForClaims = extractSessionId(md);
-        const allProgress = readAllAgentProgress(wsRoot, sessionIdForClaims);
+        const md = storage.readManifest(wsRoot);
+        const sessionId = storage.extractSessionId(md);
+        const allProgress = storage.readAllAgentProgress(wsRoot, sessionId);
         for (const ap of allProgress) {
             const activeClaim = ap.file_claims.find(c => c.file === file_path && !c.status.includes("Done") && !c.status.includes("Abandoned"));
             if (activeClaim) {
@@ -59,15 +49,24 @@ export async function handleClaimFile(args: Record<string, unknown>): Promise<To
             }
         }
 
-        let progress = readAgentProgress(wsRoot, agent_id);
+        let progress = storage.readAgentProgress(wsRoot, agent_id);
         if (!progress) {
-            const sessionId = extractSessionId(md);
-            const res = getTableFromSection(md, "Agents");
-            const row = res?.rows.find(r => r["ID"] === agent_id);
-            progress = createAgentProgress(agent_id, row?.["Role"] || "unknown", row?.["Phase"] || "1", sessionId);
+            const agentRow = storage.getAgent(wsRoot, agent_id);
+            progress = {
+                agent_id,
+                role: agentRow?.role || "unknown",
+                phase: agentRow?.phase || "1",
+                status: "🔄 Active",
+                detail: "",
+                session_id: sessionId,
+                file_claims: [],
+                issues: [],
+                handoff_notes: "",
+                last_updated: new Date().toISOString()
+            };
         }
         progress.file_claims.push({ file: file_path, status: "🔄 Active" });
-        writeAgentProgress(wsRoot, progress);
+        storage.writeAgentProgress(wsRoot, progress);
 
         return { toolResult: `File ${file_path} claimed by ${agent_id}`, content: [{ type: "text", text: `File ${file_path} claimed by ${agent_id} (written to agent progress file)` }] };
     } finally {
@@ -79,12 +78,13 @@ export async function handleCheckFileClaim(args: Record<string, unknown>): Promi
     const file_path = args?.file_path as string;
     if (!file_path) throw new Error("Missing required argument: file_path");
     const wsRoot = resolveWorkspaceRoot(args);
+    const storage = getStorage();
 
     const claims: Array<{ agent_id: string; file: string; status: string; source: string }> = [];
 
-    const md = readManifest(wsRoot);
-    const sessionIdForCheck = extractSessionId(md);
-    const allProgress = readAllAgentProgress(wsRoot, sessionIdForCheck);
+    const md = storage.readManifest(wsRoot);
+    const sessionId = storage.extractSessionId(md);
+    const allProgress = storage.readAllAgentProgress(wsRoot, sessionId);
     for (const ap of allProgress) {
         for (const c of ap.file_claims) {
             if (c.file === file_path) {
@@ -114,14 +114,15 @@ export async function handleReleaseFileClaim(args: Record<string, unknown>): Pro
     const status = args?.status as string;
     if (!agent_id || !file_path || !status) throw new Error("Missing required arguments: agent_id, file_path, status");
     const wsRoot = resolveWorkspaceRoot(args);
+    const storage = getStorage();
 
-    let progress = readAgentProgress(wsRoot, agent_id);
+    let progress = storage.readAgentProgress(wsRoot, agent_id);
     if (!progress) throw new Error(`Agent progress file for ${agent_id} not found`);
 
     const claim = progress.file_claims.find(c => c.file === file_path && !c.status.includes("Done"));
     if (!claim) throw new Error(`Active claim for ${file_path} by ${agent_id} not found`);
     claim.status = status;
-    writeAgentProgress(wsRoot, progress);
+    storage.writeAgentProgress(wsRoot, progress);
 
     return { toolResult: `File ${file_path} claim released with status ${status}`, content: [{ type: "text", text: `File ${file_path} claim released with status ${status} (written to agent progress file)` }] };
 }

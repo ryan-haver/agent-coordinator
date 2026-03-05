@@ -2,45 +2,50 @@
  * Agent tool handlers: update_agent_status, add_agent_to_manifest, mark_agent_failed,
  * reassign_agent, get_my_assignment, get_agent_progress, remove_agent_from_manifest,
  * update_agent_in_manifest, get_agent_prompt
+ *
+ * Uses StorageAdapter for all manifest and progress operations.
  */
 import path from "path";
 import fs from "fs";
 import { resolveWorkspaceRoot, globalConfigPath, type ToolResponse } from "./context.js";
+import { getStorage } from "../storage/singleton.js";
 import {
     getTableFromSection,
     replaceTableInSection,
-    serializeTableToString,
-    readManifest,
-    withManifestLock
+    serializeTableToString
 } from "../utils/manifest.js";
-import {
-    readAgentProgress,
-    writeAgentProgress,
-    createAgentProgress,
-    extractSessionId
-} from "../utils/agent-progress.js";
-import { updateSwarmRegistry } from "../utils/swarm-registry.js";
 
 export async function handleUpdateAgentStatus(args: Record<string, unknown>): Promise<ToolResponse> {
     const agent_id = args?.agent_id as string;
     const status = args?.status as string;
     if (!agent_id || !status) throw new Error("Missing required arguments: agent_id, status");
     const wsRoot = resolveWorkspaceRoot(args);
+    const storage = getStorage();
 
-    let progress = readAgentProgress(wsRoot, agent_id);
+    let progress = storage.readAgentProgress(wsRoot, agent_id);
     if (!progress) {
-        const md = readManifest(wsRoot);
-        const sessionId = extractSessionId(md);
-        const res = getTableFromSection(md, "Agents");
-        const row = res?.rows.find(r => r["ID"] === agent_id);
-        progress = createAgentProgress(agent_id, row?.["Role"] || "unknown", row?.["Phase"] || "1", sessionId);
+        const md = storage.readManifest(wsRoot);
+        const sessionId = storage.extractSessionId(md);
+        const agent = storage.getAgent(wsRoot, agent_id);
+        progress = {
+            agent_id,
+            role: agent?.role || "unknown",
+            phase: agent?.phase || "1",
+            status: "⏳ Pending",
+            detail: "",
+            session_id: sessionId,
+            file_claims: [],
+            issues: [],
+            handoff_notes: "",
+            last_updated: new Date().toISOString()
+        };
     }
     progress.status = status;
     const detail = args?.detail as string | undefined;
     if (detail) progress.detail = detail;
     const phase = args?.phase as string | undefined;
     if (phase) progress.phase = phase;
-    writeAgentProgress(wsRoot, progress);
+    storage.writeAgentProgress(wsRoot, progress);
 
     return { toolResult: `Agent ${agent_id} status updated to ${status}`, content: [{ type: "text", text: `Agent ${agent_id} status updated to ${status}${detail ? ` (${detail})` : ''} (written to agent progress file)` }] };
 }
@@ -49,8 +54,9 @@ export async function handleAddAgentToManifest(args: Record<string, unknown>): P
     const { agent_id, role, model, phase, scope } = args as any;
     if (!agent_id || !role || !model || !phase || !scope) throw new Error("Missing required arguments");
     const wsRoot = resolveWorkspaceRoot(args);
+    const storage = getStorage();
 
-    await withManifestLock(wsRoot, (md) => {
+    await storage.withManifestLock(wsRoot, (md) => {
         const agentsTable = getTableFromSection(md, "Agents");
         if (!agentsTable) throw new Error("No ## Agents table found in manifest");
         if (agentsTable.rows.some(r => r["ID"] === agent_id)) {
@@ -61,7 +67,10 @@ export async function handleAddAgentToManifest(args: Record<string, unknown>): P
         return { content: updated || md, result: agentsTable.rows.length };
     });
 
-    try { await updateSwarmRegistry(wsRoot, { agents_total: (getTableFromSection(readManifest(wsRoot), "Agents")?.rows.length || 0) }); } catch { /* non-fatal */ }
+    try {
+        const agents = storage.listAgents(wsRoot);
+        await storage.updateSwarmRegistry(wsRoot, { agents_total: agents.length });
+    } catch { /* non-fatal */ }
 
     return { toolResult: `Agent ${agent_id} added`, content: [{ type: "text", text: `Added agent ${agent_id} (${role}) to Phase ${phase}` }] };
 }
@@ -70,12 +79,24 @@ export async function handleMarkAgentFailed(args: Record<string, unknown>): Prom
     const { agent_id, reason } = args as any;
     if (!agent_id || !reason) throw new Error("Missing required arguments");
     const wsRoot = resolveWorkspaceRoot(args);
-    const md = readManifest(wsRoot);
-    const sessionId = extractSessionId(md);
+    const storage = getStorage();
+    const md = storage.readManifest(wsRoot);
+    const sessionId = storage.extractSessionId(md);
 
-    let progress = readAgentProgress(wsRoot, agent_id);
+    let progress = storage.readAgentProgress(wsRoot, agent_id);
     if (!progress) {
-        progress = createAgentProgress(agent_id, "unknown", "0", sessionId);
+        progress = {
+            agent_id,
+            role: "unknown",
+            phase: "0",
+            status: "⏳ Pending",
+            detail: "",
+            session_id: sessionId,
+            file_claims: [],
+            issues: [],
+            handoff_notes: "",
+            last_updated: new Date().toISOString()
+        };
     }
     progress.status = "❌ Failed";
     progress.detail = reason;
@@ -91,10 +112,10 @@ export async function handleMarkAgentFailed(args: Record<string, unknown>): Prom
     const timestamp = new Date().toISOString().slice(0, 19);
     const failNote = `[${timestamp}] [SYSTEM] Agent ${agent_id} failed: ${reason}. Released files: ${releasedFiles.join(", ") || "none"}`;
     progress.handoff_notes = progress.handoff_notes ? progress.handoff_notes + '\n' + failNote : failNote;
-    writeAgentProgress(wsRoot, progress);
+    storage.writeAgentProgress(wsRoot, progress);
 
     try {
-        await withManifestLock(wsRoot, (mdUpdated) => {
+        await storage.withManifestLock(wsRoot, (mdUpdated) => {
             const agentsTable = getTableFromSection(mdUpdated, "Agents");
             if (agentsTable) {
                 const row = agentsTable.rows.find(r => r["ID"] === agent_id);
@@ -106,6 +127,7 @@ export async function handleMarkAgentFailed(args: Record<string, unknown>): Prom
         });
     } catch { /* non-fatal */ }
 
+    // Clean up lock files
     try {
         const lockFiles = fs.readdirSync(wsRoot).filter(f => f.startsWith('.claim-lock-'));
         for (const lf of lockFiles) {
@@ -123,12 +145,13 @@ export async function handleReassignAgent(args: Record<string, unknown>): Promis
     const { from_agent_id, to_agent_id, to_role, to_model } = args as any;
     if (!from_agent_id || !to_agent_id) throw new Error("Missing required arguments");
     const wsRoot = resolveWorkspaceRoot(args);
+    const storage = getStorage();
 
-    const fromProgress = readAgentProgress(wsRoot, from_agent_id);
+    const fromProgress = storage.readAgentProgress(wsRoot, from_agent_id);
     const pendingClaims = fromProgress?.file_claims.filter(c => c.status !== "✅ Done") || [];
 
-    const { newRow, sessionId } = await withManifestLock(wsRoot, (md) => {
-        const sid = extractSessionId(md);
+    const { newRow, sessionId } = await storage.withManifestLock(wsRoot, (md) => {
+        const sid = storage.extractSessionId(md);
         const agentsTable = getTableFromSection(md, "Agents");
         if (!agentsTable) throw new Error("No Agents table in manifest");
         const fromRow = agentsTable.rows.find(r => r["ID"] === from_agent_id);
@@ -148,18 +171,24 @@ export async function handleReassignAgent(args: Record<string, unknown>): Promis
         return { content: updated || md, result: { newRow: nr, sessionId: sid } };
     });
 
-    const newProgress = createAgentProgress(to_agent_id, newRow["Role"], newRow["Phase"], sessionId);
-    newProgress.detail = `Reassigned from ${from_agent_id}`;
-    for (const claim of pendingClaims) {
-        newProgress.file_claims.push({ file: claim.file, status: "📋 Transferred" });
-    }
-    newProgress.handoff_notes = `Reassigned from ${from_agent_id}. Pending files: ${pendingClaims.map(c => c.file).join(", ") || "none"}`;
-    writeAgentProgress(wsRoot, newProgress);
+    const newProgress = {
+        agent_id: to_agent_id,
+        role: newRow["Role"],
+        phase: newRow["Phase"],
+        status: "⏳ Pending",
+        detail: `Reassigned from ${from_agent_id}`,
+        session_id: sessionId,
+        file_claims: pendingClaims.map(c => ({ file: c.file, status: "📋 Transferred" })),
+        issues: [],
+        handoff_notes: `Reassigned from ${from_agent_id}. Pending files: ${pendingClaims.map(c => c.file).join(", ") || "none"}`,
+        last_updated: new Date().toISOString()
+    };
+    storage.writeAgentProgress(wsRoot, newProgress);
 
     if (fromProgress) {
         const ts = new Date().toISOString().slice(0, 19);
         fromProgress.handoff_notes = (fromProgress.handoff_notes || '') + `\n[${ts}] [SYSTEM] ${from_agent_id} reassigned to ${to_agent_id}`;
-        writeAgentProgress(wsRoot, fromProgress);
+        storage.writeAgentProgress(wsRoot, fromProgress);
     }
 
     return { toolResult: `Reassigned ${from_agent_id} → ${to_agent_id}`, content: [{ type: "text", text: `Reassigned ${from_agent_id} → ${to_agent_id}. Transferred ${pendingClaims.length} pending file claims.` }] };
@@ -169,22 +198,21 @@ export async function handleGetMyAssignment(args: Record<string, unknown>): Prom
     const { agent_id } = args as any;
     if (!agent_id) throw new Error("Missing required argument: agent_id");
     const wsRoot = resolveWorkspaceRoot(args);
-    const md = readManifest(wsRoot);
+    const storage = getStorage();
 
-    const agentsTable = getTableFromSection(md, "Agents");
-    if (!agentsTable) throw new Error("No Agents table in manifest");
-    const row = agentsTable.rows.find(r => r["ID"] === agent_id);
-    if (!row) throw new Error(`Agent ${agent_id} not found in manifest`);
+    const agent = storage.getAgent(wsRoot, agent_id);
+    if (!agent) throw new Error(`Agent ${agent_id} not found in manifest`);
 
-    return { toolResult: JSON.stringify(row), content: [{ type: "text", text: JSON.stringify(row, null, 2) }] };
+    return { toolResult: JSON.stringify(agent), content: [{ type: "text", text: JSON.stringify(agent, null, 2) }] };
 }
 
 export async function handleGetAgentProgress(args: Record<string, unknown>): Promise<ToolResponse> {
     const { agent_id } = args as any;
     if (!agent_id) throw new Error("Missing required argument: agent_id");
     const wsRoot = resolveWorkspaceRoot(args);
+    const storage = getStorage();
 
-    const progress = readAgentProgress(wsRoot, agent_id);
+    const progress = storage.readAgentProgress(wsRoot, agent_id);
     if (!progress) throw new Error(`No progress file found for agent ${agent_id}`);
 
     return { toolResult: JSON.stringify(progress), content: [{ type: "text", text: JSON.stringify(progress, null, 2) }] };
@@ -194,8 +222,9 @@ export async function handleRemoveAgentFromManifest(args: Record<string, unknown
     const { agent_id } = args as any;
     if (!agent_id) throw new Error("Missing required argument: agent_id");
     const wsRoot = resolveWorkspaceRoot(args);
+    const storage = getStorage();
 
-    await withManifestLock(wsRoot, (md) => {
+    await storage.withManifestLock(wsRoot, (md) => {
         const agentsTable = getTableFromSection(md, "Agents");
         if (!agentsTable) throw new Error("No Agents table in manifest");
         const idx = agentsTable.rows.findIndex(r => r["ID"] === agent_id);
@@ -205,7 +234,10 @@ export async function handleRemoveAgentFromManifest(args: Record<string, unknown
         return { content: updated || md, result: agentsTable.rows.length };
     });
 
-    try { await updateSwarmRegistry(wsRoot, { agents_total: (getTableFromSection(readManifest(wsRoot), "Agents")?.rows.length || 0) }); } catch { /* non-fatal */ }
+    try {
+        const agents = storage.listAgents(wsRoot);
+        await storage.updateSwarmRegistry(wsRoot, { agents_total: agents.length });
+    } catch { /* non-fatal */ }
 
     return { toolResult: `Agent ${agent_id} removed`, content: [{ type: "text", text: `Removed agent ${agent_id} from manifest` }] };
 }
@@ -214,8 +246,9 @@ export async function handleUpdateAgentInManifest(args: Record<string, unknown>)
     const { agent_id, role, model, scope } = args as any;
     if (!agent_id) throw new Error("Missing required argument: agent_id");
     const wsRoot = resolveWorkspaceRoot(args);
+    const storage = getStorage();
 
-    const changes = await withManifestLock(wsRoot, (md) => {
+    const changes = await storage.withManifestLock(wsRoot, (md) => {
         const agentsTable = getTableFromSection(md, "Agents");
         if (!agentsTable) throw new Error("No Agents table in manifest");
         const row = agentsTable.rows.find(r => r["ID"] === agent_id);

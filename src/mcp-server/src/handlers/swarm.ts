@@ -1,37 +1,27 @@
 /**
  * Swarm tool handlers: get_swarm_status, complete_swarm, list_active_swarms, rollup_agent_progress
+ *
+ * Uses StorageAdapter for manifest, progress, events, and registry operations.
  */
 import path from "path";
 import fs from "fs";
 import { resolveWorkspaceRoot, type ToolResponse } from "./context.js";
+import { getStorage } from "../storage/singleton.js";
 import {
     getTableFromSection,
     replaceTableInSection,
-    serializeTableToString,
-    readManifest,
-    withManifestLock
+    serializeTableToString
 } from "../utils/manifest.js";
-import {
-    readAllAgentProgress,
-    cleanupAgentFiles,
-    extractSessionId
-} from "../utils/agent-progress.js";
-import {
-    listActiveSwarms,
-    deregisterSwarm,
-    getEvents,
-    cleanupEvents
-} from "../utils/swarm-registry.js";
-import { writeSwarmStatus } from "./shared.js";
 
 export async function handleGetSwarmStatus(args: Record<string, unknown>): Promise<ToolResponse> {
     const wsRoot = resolveWorkspaceRoot(args);
-    const md = readManifest(wsRoot);
+    const storage = getStorage();
+    const md = storage.readManifest(wsRoot);
     const agents = getTableFromSection(md, "Agents")?.rows || [];
     const manifestIssues = getTableFromSection(md, "Issues")?.rows || [];
 
-    const sessionId = extractSessionId(md);
-    const agentFiles = readAllAgentProgress(wsRoot, sessionId);
+    const sessionId = storage.extractSessionId(md);
+    const agentFiles = storage.readAllAgentProgress(wsRoot, sessionId);
     for (const ap of agentFiles) {
         const row = agents.find(a => a["ID"] === ap.agent_id);
         if (row) {
@@ -67,7 +57,7 @@ export async function handleGetSwarmStatus(args: Record<string, unknown>): Promi
     }
 
     let events: any[] = [];
-    try { events = getEvents(wsRoot, sessionId); } catch { /* non-fatal */ }
+    try { events = storage.getEvents(wsRoot, sessionId); } catch { /* non-fatal */ }
 
     const scopeRequests = agentFiles.flatMap(ap =>
         ap.issues.filter(i => i.severity?.includes('SCOPE_REQUEST') || i.severity?.includes('SCOPE_GRANTED') || i.severity?.includes('SCOPE_DENIED')).map(i => ({
@@ -83,10 +73,11 @@ export async function handleGetSwarmStatus(args: Record<string, unknown>): Promi
 
 export async function handleCompleteSwarm(args: Record<string, unknown>): Promise<ToolResponse> {
     const wsRoot = resolveWorkspaceRoot(args);
+    const storage = getStorage();
 
-    const { sessionId, allProgress } = await withManifestLock(wsRoot, (md) => {
-        const sid = extractSessionId(md);
-        const progress = readAllAgentProgress(wsRoot, sid);
+    const { sessionId, allProgress } = await storage.withManifestLock(wsRoot, (md) => {
+        const sid = storage.extractSessionId(md);
+        const progress = storage.readAllAgentProgress(wsRoot, sid);
         const agentsTable = getTableFromSection(md, "Agents");
         if (agentsTable) {
             for (const ap of progress) {
@@ -99,7 +90,7 @@ export async function handleCompleteSwarm(args: Record<string, unknown>): Promis
         return { content: md, result: { sessionId: sid, allProgress: progress } };
     });
 
-    const md = readManifest(wsRoot);
+    const md = storage.readManifest(wsRoot);
     const agentsTable = getTableFromSection(md, "Agents");
     const totalAgents = agentsTable?.rows.length || 0;
     const completedAgents = allProgress.filter(a => a.status?.includes("Complete") || a.status?.includes("Done")).length;
@@ -110,7 +101,7 @@ export async function handleCompleteSwarm(args: Record<string, unknown>): Promis
     const archiveName = `swarm-manifest-${sessionId.replace(/[:.]/g, '-')}.md`;
     fs.copyFileSync(path.join(wsRoot, 'swarm-manifest.md'), path.join(archiveDir, archiveName));
 
-    writeSwarmStatus(wsRoot, md, "Swarm completed");
+    storage.writeSwarmStatus(wsRoot, "Swarm completed");
 
     try {
         const missionMatch = md.match(/## Mission\s*\n+([\s\S]*?)(?:\n## |$)/);
@@ -148,31 +139,31 @@ export async function handleCompleteSwarm(args: Record<string, unknown>): Promis
         fs.writeFileSync(path.join(wsRoot, 'swarm-report.md'), report, 'utf8');
     } catch { /* report generation is non-fatal */ }
 
-    const cleaned = cleanupAgentFiles(wsRoot);
-
-    try { cleanupEvents(wsRoot, sessionId); } catch { /* non-fatal */ }
-
-    try { await deregisterSwarm(wsRoot); } catch { /* non-fatal */ }
+    const cleaned = storage.cleanupAgentFiles(wsRoot);
+    try { storage.cleanupEvents(wsRoot, sessionId); } catch { /* non-fatal */ }
+    try { await storage.deregisterSwarm(wsRoot); } catch { /* non-fatal */ }
 
     return { toolResult: "Swarm completed", content: [{ type: "text", text: `Swarm completed. ${completedAgents}/${totalAgents} agents succeeded, ${failedAgents} failed. Archived to ${archiveName}. Report: swarm-report.md. Cleaned ${cleaned} agent files.` }] };
 }
 
 export async function handleListActiveSwarms(_args: Record<string, unknown>): Promise<ToolResponse> {
-    const swarms = listActiveSwarms();
+    const storage = getStorage();
+    const swarms = storage.listActiveSwarms();
     return { toolResult: JSON.stringify(swarms), content: [{ type: "text", text: swarms.length > 0 ? JSON.stringify(swarms, null, 2) : "(No active swarms)" }] };
 }
 
 export async function handleRollupAgentProgress(args: Record<string, unknown>): Promise<ToolResponse> {
     const wsRoot = resolveWorkspaceRoot(args);
+    const storage = getStorage();
 
-    const mdForSession = readManifest(wsRoot);
-    const sessionId = extractSessionId(mdForSession);
-    const allProgress = readAllAgentProgress(wsRoot, sessionId);
+    const mdForSession = storage.readManifest(wsRoot);
+    const sessionId = storage.extractSessionId(mdForSession);
+    const allProgress = storage.readAllAgentProgress(wsRoot, sessionId);
     if (allProgress.length === 0) {
         return { toolResult: "No agent progress files found.", content: [{ type: "text", text: "No agent progress files found." }] };
     }
 
-    const rollupResult = await withManifestLock(wsRoot, (md) => {
+    const rollupResult = await storage.withManifestLock(wsRoot, (md) => {
         // 1. Update Agents table
         const agentsTable = getTableFromSection(md, "Agents");
         if (agentsTable) {
@@ -264,6 +255,6 @@ export async function handleRollupAgentProgress(args: Record<string, unknown>): 
         return { content: md, result: allProgress.map(ap => `${ap.agent_id} (${ap.role}): ${ap.status}`).join(", ") };
     });
 
-    writeSwarmStatus(wsRoot, readManifest(wsRoot), `Rolled up progress from ${allProgress.length} agents`);
+    storage.writeSwarmStatus(wsRoot, `Rolled up progress from ${allProgress.length} agents`);
     return { toolResult: `Rollup complete: ${rollupResult}`, content: [{ type: "text", text: `Rollup complete for ${allProgress.length} agents: ${rollupResult}` }] };
 }
