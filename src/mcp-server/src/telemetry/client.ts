@@ -220,7 +220,13 @@ export class TelemetryClient {
                 `UPDATE telemetry_buffer SET synced = 1 WHERE id IN (${ids.map(() => "?").join(",")})`
             ).run(...ids);
 
-            console.error(`[telemetry] Drained ${drained} buffered events to TimescaleDB`);
+            // Cleanup old synced rows beyond TTL (default 24h)
+            const ttlHours = parseInt(process.env.TELEMETRY_BUFFER_TTL_HOURS ?? "24", 10);
+            const deleted = this.db.prepare(
+                `DELETE FROM telemetry_buffer WHERE synced = 1 AND ts < datetime('now', '-${ttlHours} hours')`
+            ).run();
+
+            console.error(`[telemetry] Drained ${drained} buffered events to TimescaleDB (cleaned up ${deleted.changes} old rows)`);
         } catch (e) {
             await client.query("ROLLBACK");
             this.connected = false;

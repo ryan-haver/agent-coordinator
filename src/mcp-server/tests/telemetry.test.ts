@@ -185,6 +185,40 @@ describe("TelemetryClient.drainBuffer", () => {
         const count = await client.drainBuffer();
         expect(count).toBe(0);
     });
+
+    it("TTL cleanup removes old synced rows after drain", async () => {
+        // Insert a recent row normally
+        client.record({ tool_name: "get_my_assignment", duration_ms: 5, success: true });
+
+        // Manually insert an old already-synced row (simulate pre-existing synced data)
+        client.queryLocal(
+            "INSERT INTO telemetry_buffer (ts, tool_name, duration_ms, success, synced) VALUES (datetime('now', '-48 hours'), 'old_tool', 1, 1, 1)"
+        );
+
+        const mockClient = {
+            query: vi.fn().mockResolvedValue({}),
+            release: vi.fn()
+        };
+        const mockPool = {
+            connect: vi.fn().mockResolvedValue(mockClient),
+            end: vi.fn().mockResolvedValue(undefined)
+        };
+        (client as any).pool = mockPool;
+        (client as any).connected = true;
+
+        // Set TTL to 24h
+        process.env.TELEMETRY_BUFFER_TTL_HOURS = "24";
+        await client.drainBuffer();
+        delete process.env.TELEMETRY_BUFFER_TTL_HOURS;
+
+        // Old row (48h ago) should be gone
+        const old = client.queryLocal("SELECT * FROM telemetry_buffer WHERE tool_name = 'old_tool'");
+        expect(old).toHaveLength(0);
+
+        // Recent row (just drained) should still be present (it's < 24h old)
+        const recent = client.queryLocal("SELECT * FROM telemetry_buffer WHERE synced = 1 AND tool_name = 'get_my_assignment'");
+        expect(recent).toHaveLength(1);
+    });
 });
 
 // ── Schema v2 migration ───────────────────────────────────────────────
