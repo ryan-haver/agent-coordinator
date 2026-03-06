@@ -33,6 +33,17 @@ export interface TelemetryEvent {
     args_summary?: string;
 }
 
+export interface AgentEvent {
+    event_type: string;  // status_change, file_claim, file_release, phase_advance, issue_report
+    agent_id: string;
+    session_id?: string;
+    workspace?: string;
+    phase?: string;
+    model?: string;
+    detail?: Record<string, unknown>;
+    duration_ms?: number;
+}
+
 interface TelemetryBufferRow {
     id: number;
     ts: string;
@@ -156,6 +167,30 @@ export class TelemetryClient {
         if (this.connected && this.pool) {
             this._writeTsdb(event).catch(() => { /* non-fatal */ });
         }
+    }
+
+    /**
+     * Record a lifecycle event (status change, file claim, phase advance, etc.)
+     * Fire-and-forget to TSDB agent_events table.
+     */
+    recordEvent(event: AgentEvent): void {
+        if (!this.enabled) return;
+        if (!this.connected || !this.pool) return;
+
+        this.pool.query(
+            `INSERT INTO agent_events (session_id, workspace, agent_id, event_type, phase, model, detail, duration_ms)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [
+                event.session_id ?? this.defaultSessionId,
+                event.workspace ?? this.defaultWorkspace,
+                event.agent_id,
+                event.event_type,
+                event.phase ?? "",
+                event.model ?? "",
+                JSON.stringify(event.detail ?? {}),
+                event.duration_ms ?? 0
+            ]
+        ).catch(() => { /* non-fatal */ });
     }
 
     private async _writeTsdb(event: TelemetryEvent): Promise<void> {

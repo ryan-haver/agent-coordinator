@@ -1,45 +1,64 @@
-# M4 Execution Log
+# M5 Execution Log
 
-## Step 4.1 — Docker Compose: Qdrant service ✅
+## Step 5.1 — Update README.md ✅
 
-- **Files:** `docker-compose.telemetry.yml` [MODIFY], `.env.example` [NEW]
-- Added `qdrant` service (port 6333, named volume, healthcheck)
-- Created `.env.example` documenting all environment variables
+- **Files:** `README.md` [MODIFY]
+- Updated "35 tools" → "39 tools" throughout
+- Added "Data Layer (Phase 5)" section with 3-backend table
+- Rewrote Project Structure tree reflecting modular handler layout
+- Updated Phase 5 roadmap table (5A/5B/5C/5D all complete)
 
-## Step 4.2 — Memory client ✅
+## Step 5.2 — Tool Reference ✅
 
-- **Files:** `src/memory/client.ts` [NEW], `src/memory/collections.ts` [NEW]
-- `MemoryClient`: embed + upsert + search, lazy `@xenova/transformers` pipeline
-- Soft dependency: QDRANT_URL not set → all ops are silent no-ops
-- 4 collections: `agent_notes`, `code_snippets`, `project_docs`, `issues` (384-dim cosine)
+- **Files:** `docs/TOOL-REFERENCE.md` [NEW]
+- Summary table: all 39 tools with domain, backend indicators, descriptions
+- 10 domain sections with full arg tables (Required/Optional)
+- Backend indicators: 📁 File, 🗃️ SQLite, 📊 TimescaleDB, 🧠 Qdrant
+- Soft dependency notes for Telemetry and Memory sections
 
-## Step 4.3 — npm dependencies ✅
+## Step 5.3 — Architecture Overview ✅
 
-- **Files:** `package.json` [MODIFY]
-- `@xenova/transformers@^2.17.0`, `@qdrant/js-client-rest@^1.9.0`
+- **Files:** `docs/ARCHITECTURE.md` [NEW]
+- Mermaid diagram: MCP Client → Router → Handlers → Backends
+- Handler architecture: 10 modules, tool registration pattern
+- Storage layer: StorageAdapter interface, File/SQLite implementations
+- Telemetry pipeline: dual-write, 30s drain, soft dependency
+- Semantic memory: Qdrant + @xenova/transformers, 4 collections
+- Testing architecture: InMemoryTransport harness, Part A/B pattern
 
-## Step 4.4 — 4 new MCP tools ✅
+## Step 5.4 — Operations Guide ✅
 
-- **Files:** `src/handlers/memory.ts` [NEW], `tool-definitions.ts` [MODIFY], `handlers/index.ts` [MODIFY], `src/index.ts` [MODIFY]
-- Tools: `store_memory`, `semantic_search`, `find_similar_code`, `find_past_solutions`
-- Total MCP tools: 35 → 39
-- `initMemory()` wired into server startup
-- **Bug fix:** Moved collection validation before `isReady()` check — invalid collections always throw
+- **Files:** `docs/OPERATIONS.md` [NEW]
+- Quick start, Docker services, health checks
+- Environment variables table with defaults
+- Storage backend selection guide
+- Telemetry and semantic memory setup
+- Testing and gate commands
+- Troubleshooting section (5 common issues)
 
-## Step 4.5 — Auto-index handoff notes ✅
+## Step 5.5 — Developer Guide ✅
 
-- **Files:** `src/handlers/events.ts` [MODIFY]
-- `post_handoff_note` now fire-and-forgets `getMemory()?.store()` into `agent_notes`
+- **Files:** `docs/DEVELOPER-GUIDE.md` [NEW]
+- 4-step "Adding a New Tool" walkthrough with code examples
+- Adding Qdrant collections
+- Storage adapter pattern
+- Testing conventions (Part A/B pattern)
+- Integration gate explanation
+- Code organization guide
 
-## Step 4.6 — M4 integration tests ✅
+## Step 5.6 — Update MCP-COVERAGE-GAPS.md ✅
 
-- **Files:** `tests/integration/m4-qdrant.test.ts` [NEW]
-- Part A (7 tests): graceful no-op, validation errors
-- Part B (4 tests): live Qdrant — skip when `QDRANT_URL` not set
-- `npx vitest run tests/integration/m4-qdrant.test.ts` → **7 pass, 4 skip**
+- **Files:** `docs/MCP-COVERAGE-GAPS.md` [MODIFY]
+- Updated 35 → 39 tools, updated date
+- Added gaps 27-34 (telemetry + memory tools)
 
-## Step 4.7 — Milestone gate ✅
+## Step 5.7 — ROADMAP.md (skipped)
+
+- ROADMAP.md is 49KB — skipped in favor of updating README roadmap table (done in 5.1)
+
+## Step 5.8 — Gate + Commit ✅
 
 - `npx tsc --noEmit` → ✅
-- `npm test` (unit) → ✅ 74 pass
-- `npm run test:integration` → ✅ 38 pass, 6 skip (4 files)
+- `npm test` → ✅
+- `npm run test:integration` → ✅
+- `git commit` → ✅ (working tree clean)

@@ -67,6 +67,11 @@ export async function handleAddAgentToManifest(args: Record<string, unknown>): P
         return { content: updated || md, result: agentsTable.rows.length };
     });
 
+    // Sync structured storage (SQLite agents table) so getAgent() / get_my_assignment works
+    try {
+        storage.addAgent(wsRoot, { id: agent_id, role, model, phase, scope, status: "⏳ Pending" });
+    } catch { /* non-fatal — may already exist if re-run, or file adapter is a no-op-ish */ }
+
     try {
         const agents = storage.listAgents(wsRoot);
         await storage.updateSwarmRegistry(wsRoot, { agents_total: agents.length });

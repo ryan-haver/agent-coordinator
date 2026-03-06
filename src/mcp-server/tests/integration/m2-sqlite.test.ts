@@ -174,3 +174,37 @@ describe("Full tool round-trip via SQLite", () => {
         db.close();
     });
 });
+
+// ── SQLite agent round-trip (regression for 6A.1 gap) ────────────────
+
+describe("SQLite agent round-trip", () => {
+    it("add_agent_to_manifest populates agents table, then get_my_assignment works", async () => {
+        // Setup: create manifest
+        await server.callTool("create_swarm_manifest", {
+            mission: "Agent round-trip test", workspace_root: fixture.tmpDir
+        });
+
+        // Add agent via MCP tool
+        const addResult = await server.callTool("add_agent_to_manifest", {
+            agent_id: "α", role: "developer", model: "claude", phase: "1",
+            scope: "src/", workspace_root: fixture.tmpDir
+        });
+        expect(addResult.isError).toBe(false);
+
+        // Verify agents table has the row
+        const db = openDb(fixture.tmpDir);
+        const row = db.prepare("SELECT * FROM agents WHERE id = ?").get("α") as Record<string, unknown> | undefined;
+        expect(row).toBeDefined();
+        expect(row?.role).toBe("developer");
+        expect(row?.model).toBe("claude");
+        db.close();
+
+        // get_my_assignment should now work (queries agents table)
+        const assignment = await server.callTool("get_my_assignment", {
+            agent_id: "α", workspace_root: fixture.tmpDir
+        });
+        expect(assignment.isError).toBe(false);
+        expect(assignment.text).toContain("α");
+        expect(assignment.text).toContain("developer");
+    });
+});

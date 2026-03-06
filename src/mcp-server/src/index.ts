@@ -123,6 +123,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<any> =>
             args_summary: summarizeArgs(safeArgs)
         });
 
+        // Emit lifecycle event for key operations
+        const EVENT_MAP: Record<string, string> = {
+            update_agent_status: "status_change",
+            mark_agent_failed: "status_change",
+            claim_file: "file_claim",
+            release_file_claim: "file_release",
+            advance_phase: "phase_advance",
+            report_issue: "issue_report",
+        };
+        const eventType = EVENT_MAP[name];
+        if (eventType) {
+            getTelemetry()?.recordEvent({
+                event_type: eventType,
+                agent_id: String(safeArgs.agent_id ?? safeArgs.reporter ?? ""),
+                phase: String(safeArgs.phase ?? safeArgs.phase_number ?? ""),
+                detail: { tool: name, args: safeArgs },
+                duration_ms: duration
+            });
+        }
+
         return result;
     } catch (error: any) {
         const duration = Date.now() - start;
