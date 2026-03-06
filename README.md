@@ -227,11 +227,11 @@ agent-coordinator/
 │
 ├── docs/
 │   ├── ARCHITECTURE.md                    ← System architecture & data flow
-│   ├── TOOL-REFERENCE.md                  ← All 39 MCP tools (auto-generated)
+│   ├── TOOL-REFERENCE.md                  ← All 41 MCP tools (auto-generated)
 │   ├── OPERATIONS.md                      ← Setup, Docker, troubleshooting
 │   ├── DEVELOPER-GUIDE.md                 ← Adding tools, testing, patterns
 │   ├── CUSTOMIZATION.md                   ← Configuration guide
-│   ├── ROADMAP.md                         ← Unified roadmap (Phases 1A–5)
+│   ├── ROADMAP.md                         ← Unified roadmap (Phases 1A–6)
 │   ├── manifest-reference.md              ← Swarm manifest sections
 │   └── MCP-COVERAGE-GAPS.md               ← Tool coverage tracker
 │
@@ -244,7 +244,7 @@ agent-coordinator/
     ├── skill/ / rules/ / workflows/        ← Layers 2 & 3
     ├── templates/                          ← Manifest + agent prompt templates
     │
-    └── mcp-server/                         ← MCP Coordination Server (39 tools)
+    └── mcp-server/                         ← MCP Coordination Server (41 tools)
         ├── package.json / tsconfig.json
         └── src/
             ├── index.ts                    ← Thin router + telemetry instrumentation
@@ -256,7 +256,7 @@ agent-coordinator/
             │   ├── events.ts               ← Events & handoff notes (5 tools)
             │   ├── swarm.ts                ← Swarm lifecycle (4 tools)
             │   ├── memory.ts               ← Semantic memory (4 tools)
-            │   ├── telemetry.ts            ← Telemetry queries (4 tools)
+            │   ├── telemetry.ts            ← Telemetry queries (6 tools)
             │   ├── scope.ts                ← Scope negotiation (3 tools)
             │   └── quota.ts / fusebase.ts  ← Quota + Fusebase (4 tools)
             ├── storage/                    ← StorageAdapter + 2 implementations
@@ -289,3 +289,4 @@ See [ROADMAP.md](docs/ROADMAP.md) for the full plan:
 | **5B** | TimescaleDB Telemetry | ✅ Complete |
 | **5C** | Qdrant Semantic Memory | ✅ Complete |
 | **5D** | Documentation | ✅ Complete |
+| **6** | Temporal RAG & CI | ✅ Complete |
