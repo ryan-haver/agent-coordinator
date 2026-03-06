@@ -52,10 +52,11 @@ Sourced from [Antigravity Cockpit](https://github.com/jlcodes99/vscode-antigravi
 | **2C** | Fusebase Agent Accounts | ✅ Complete | @mentions, comments, human↔agent communication |
 | **3** | Cockpit Quota Awareness | ✅ Complete | Passive quota monitoring |
 | **4** | Direct Quota API | ✅ Complete | Programmatic quota checking |
-| **5** | Advanced Capabilities | Future | Database layer, marketplace, dashboards |
-| **5A** | SpacetimeDB — Working Memory | Future | Real-time sync, shared state, distributed logic |
-| **5B** | Qdrant — Semantic Memory | Future | RAG, code search by meaning, knowledge retrieval |
-| **5C** | TimescaleDB — Telemetry & Logs | Future | Performance analytics, temporal RAG, audit trail |
+| **5** | Advanced Capabilities | ✅ Complete | Modular handlers, 3-backend architecture, docs |
+| **5A** | SQLite — Working Memory | ✅ Complete | StorageAdapter, atomic writes, queryable state |
+| **5B** | Qdrant — Semantic Memory | ✅ Complete | RAG, code search by meaning, knowledge retrieval |
+| **5C** | TimescaleDB — Telemetry & Logs | ✅ Complete | Dual-write pipeline, agent_events, model_performance |
+| **5D** | Documentation | ✅ Complete | Tool reference, architecture, operations, developer guide |
 
 ---
 
@@ -235,8 +236,8 @@ When the `--auto` flag is present, the coordinator agent:
 }
 ```
 
-3. **Adds auto-mode markers** to the manifest
-4. **Restores original settings** when the swarm completes
+1. **Adds auto-mode markers** to the manifest
+2. **Restores original settings** when the swarm completes
 
 #### Safety
 
@@ -470,6 +471,7 @@ PM tracks usage in the manifest's `## Notebook` section:
 ```
 
 **Rules:**
+
 1. Check count before adding sources
 2. If within 5 of limit → alert PM
 3. If at limit → PM creates overflow notebook
@@ -508,6 +510,7 @@ Aliases:
 - Cross-project query documented in SKILL.md
 
 ### Open Questions
+
 - Should old project notebooks be archived or kept active indefinitely?
 - NLM session expires ~20 min — how to handle re-auth during long swarms?
 - Should we auto-generate a podcast/report at the end of every swarm?
@@ -574,6 +577,7 @@ The PM creates a Fusebase kanban board on swarm start. Agents update their card 
 ```
 
 **Update triggers** (one task-board write per trigger):
+
 - Agent starts work → moves card to "In Progress"
 - Agent marks `⏸️ Blocked` → moves card to "Blocked" column
 - Agent marks `✅ Complete` → moves card to "Done"
@@ -642,6 +646,7 @@ Each agent authenticates as its own account when writing to Fusebase. Comments, 
 The user can interact with agents through Fusebase's native collaboration features:
 
 #### User → Agent (comments & @mentions)
+
 ```
 User comments on Architecture Plan page:
   "@agent-dev-β Can you also handle the currency 
@@ -658,6 +663,7 @@ Agent β's session:
 ```
 
 #### Agent → User (deliverable review requests)
+
 ```
 Architect writes plan page, then comments:
   "@user Architecture plan ready for review. Key 
@@ -672,6 +678,7 @@ User reviews in Fusebase UI:
 ```
 
 #### Agent → Agent (cross-agent collaboration)
+
 ```
 QA finds a bug, @mentions the developer:
   "@agent-dev-β Found a null pointer in 
@@ -773,6 +780,7 @@ In supervised modes (Levels 1-3):
 ```
 
 ### Deliverables
+
 - Updated `GEMINI.md` with cockpit awareness instructions
 - Quota pre-check step in workflows
 - `## Quota Check` section in manifest template
@@ -801,11 +809,13 @@ quota-check.ps1
 ```
 
 ### Deliverables
+
 - `scripts/quota-check.ps1` + `scripts/quota-check.sh`
 - Workflow reads `quota_snapshot.json` for auto-routing
 - Agents can run script mid-session to check before dispatch
 
 ### Open Questions
+
 - Periodic background task or on-demand?
 - Exclude depleted models or warn?
 - TLS — LS uses self-signed certs (cockpit uses `rejectUnauthorized: false`)
@@ -1104,7 +1114,7 @@ Available for future queries
 
 | Tool | Description |
 |------|-------------|
-| `semantic_search` | Query across all collections | 
+| `semantic_search` | Query across all collections |
 | `index_project` | Trigger indexing for current project |
 | `find_similar_code` | Code-specific similarity search |
 | `find_past_solutions` | Search issues + resolutions |
@@ -1232,4 +1242,3 @@ Ask questions about historical agent behavior:
 - Community-contributed agent roles
 - Domain-specific presets (ML, DevOps, frontend, data engineering)
 - Agent prompt versioning and testing
-

@@ -1,5 +1,5 @@
 /**
- * MCP Tool Definitions — all 35 tool schemas in one place.
+ * MCP Tool Definitions — all 39 tool schemas in one place.
  * Extracted from the monolithic index.ts for maintainability.
  */
 
