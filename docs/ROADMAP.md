@@ -57,6 +57,7 @@ Sourced from [Antigravity Cockpit](https://github.com/jlcodes99/vscode-antigravi
 | **5B** | Qdrant — Semantic Memory | ✅ Complete | RAG, code search by meaning, knowledge retrieval |
 | **5C** | TimescaleDB — Telemetry & Logs | ✅ Complete | Dual-write pipeline, agent_events, model_performance |
 | **5D** | Documentation | ✅ Complete | Tool reference, architecture, operations, developer guide |
+| **6** | Temporal RAG & CI | ✅ Complete | 2 new analytical tools (41 total), CI pipeline, doc sync |
 
 ---
 
@@ -822,7 +823,7 @@ quota-check.ps1
 
 ---
 
-## Phase 5: Advanced Capabilities (Future)
+## Phase 5: Advanced Capabilities ✅
 
 ### Database Architecture Overview
 
@@ -842,22 +843,25 @@ graph LR
     end
 
     subgraph "Database Layer"
-        STDB["SpacetimeDB<br/>Working Memory"]
+        SQLITE["SQLite<br/>Working Memory"]
         QD["Qdrant<br/>Semantic Memory"]
         TS["TimescaleDB<br/>Telemetry & Logs"]
     end
 
     A1 & A2 & A3 & A4 --> MCP
-    MCP --> STDB
+    MCP --> SQLITE
     MCP --> QD
     MCP --> TS
 ```
 
 | Database | Role | Primary Strength | Replaces |
 |----------|------|-----------------|----------|
-| **SpacetimeDB** | Working Memory / Sync | Real-time state and logic; keeping agents in sync | `swarm-manifest.md`, `.manifest-lock`, `swarm_status.json` |
+| **SQLite** | Working Memory / Sync | ACID writes, zero-dependency, queryable state | `swarm-manifest.md`, `.manifest-lock`, `swarm_status.json` |
 | **Qdrant** | Long-Term Semantic Memory | RAG, finding code snippets by "meaning" | NotebookLM queries (supplements, doesn't replace) |
 | **TimescaleDB** | Historical Telemetry / Logs | Analyzing agent performance and "Temporal RAG" | `swarm-agent-*.json` progress files, `swarm_events/*.json` |
+
+> [!NOTE]
+> **Implementation Notes (2026-03):** Phase 5 is complete. SQLite was chosen over SpacetimeDB for Phase 5A — proven correct per Evaluation Gate 1 (polling is not a bottleneck, push notifications are unnecessary for current swarm sizes). All three backends implement graceful degradation: SQLite is always available; Qdrant and TimescaleDB fall back to SQLite or return informational messages when offline. The `StorageAdapter` interface bridges file-based and SQLite storage. Total tool count reached **41 MCP tools** across 10 domains.
 
 ### Strategic Analysis & Risk Assessment
 
@@ -937,120 +941,68 @@ Phase 5B: Qdrant (only if evidence supports it)
 
 ---
 
-### Phase 5A: SpacetimeDB — Working Memory & Real-Time Sync
+### Phase 5A: SQLite — Working Memory & Queryable State ✅
 
-Replace file-based manifest coordination with a real-time relational database that supports server-side logic modules.
+> **Decision:** SQLite was chosen over SpacetimeDB after evaluating the risk/benefit trade-off. SpacetimeDB's subscription model is innovative but adds operational complexity; SQLite provides ACID transactions with zero infrastructure. See *Strategic Analysis* above.
 
-#### Why SpacetimeDB
+#### Why SQLite Over SpacetimeDB
 
-| Current Approach | SpacetimeDB |
-|-----------------|-------------|
-| File mutex (`withManifestLock`) for write safety | ACID transactions, no lock files needed |
-| Polling manifest for status changes | Subscription-based — agents get push updates |
-| Markdown table parsing/serialization | Typed relational tables |
-| Single-file bottleneck (`swarm-manifest.md`) | Concurrent reads/writes natively |
-| Stale lock recovery (30s timeout) | No lock files = no stale locks |
+| Factor | SpacetimeDB | SQLite (chosen) |
+|--------|------------|-----------------|
+| **ACID transactions** | ✅ Full ACID | ✅ Full ACID |
+| **Dependencies** | Docker, WASM runtime | Zero — embedded in Node.js |
+| **Push notifications** | ✅ Subscription model | ❌ Polling only |
+| **Maturity** | Early, WASM-based | 20+ years, battle-tested |
+| **Graceful degradation** | Complex fallback | File system always available |
+| **Verdict** | Over-engineered for current scale | Right-sized, upgradeable later |
 
-#### Data Model
+#### Implementation: StorageAdapter Pattern
 
-```
-Table: agents
-  id: String (PK)
-  role: String
-  model: String
-  phase: u32
-  scope: String
-  status: String
-  last_updated: Timestamp
+All 35 manifest/coordination tools use a `StorageAdapter` interface that abstracts storage:
 
-Table: file_claims
-  file_path: String (PK)
-  claimed_by: String (FK → agents.id)
-  status: String
-  claimed_at: Timestamp
-
-Table: issues
-  id: u64 (auto)
-  severity: String
-  area: String
-  description: String
-  reported_by: String (FK → agents.id)
-  created_at: Timestamp
-
-Table: phase_gates
-  phase: u32 (PK)
-  complete: bool
-  completed_at: Timestamp?
-
-Table: handoff_notes
-  id: u64 (auto)
-  agent_id: String
-  note: String
-  timestamp: Timestamp
-
-Table: scope_requests
-  id: u64 (auto)
-  agent_id: String
-  file_path: String
-  reason: String
-  status: String  // pending | granted | denied
-  resolved_at: Timestamp?
+```typescript
+interface StorageAdapter {
+  getAgents(workspaceRoot: string): Promise<AgentRow[]>;
+  upsertAgent(workspaceRoot: string, agent: AgentRow): Promise<void>;
+  deleteAgent(workspaceRoot: string, agentId: string): Promise<void>;
+  getFileClaims(workspaceRoot: string): Promise<FileClaimRow[]>;
+  // ... 20+ methods covering all coordination domains
+}
 ```
 
-#### Server-Side Logic (Reducers)
+Two implementations:
+- **`FileStorageAdapter`** — reads/writes `swarm-manifest.md` via markdown parsing (original, still default)
+- **`SQLiteStorageAdapter`** — ACID writes to `~/.agent-coordinator/coordinator.db`
 
-SpacetimeDB supports server-side logic written in Rust or C# that runs atomically:
+#### SQLite Schema
 
-```
-Reducer: claim_file(agent_id, file_path)
-  → Check file not already claimed
-  → Check agent scope allows this path
-  → Insert claim atomically
-  → No race conditions possible
+```sql
+CREATE TABLE agents (
+  workspace TEXT NOT NULL,
+  agent_id  TEXT NOT NULL,
+  role      TEXT, model TEXT, scope TEXT,
+  phase     TEXT, status TEXT, detail TEXT,
+  PRIMARY KEY (workspace, agent_id)
+);
 
-Reducer: advance_phase(from, to)
-  → Verify all agents in from_phase are terminal
-  → Update phase gate
-  → Notify subscribed agents of phase change
-
-Reducer: complete_swarm()
-  → Final rollup — all in one transaction
-  → Archive to TimescaleDB
-  → Clean up working state
-```
-
-#### Subscription Model
-
-Agents subscribe to real-time updates instead of polling:
-
-```
-Agent β subscribes to:
-  - file_claims WHERE phase = current_phase
-  - issues WHERE severity = 'CONFLICT'
-  - agents WHERE phase = current_phase
-
-When Agent γ claims a file → β gets instant notification
-When PM advances phase → all agents in next phase get notified
+CREATE TABLE file_claims    (workspace, file_path PK, agent_id, status, claimed_at);
+CREATE TABLE phase_gates    (workspace, phase PK, complete BOOLEAN, completed_at);
+CREATE TABLE handoff_notes  (id INTEGER PK, workspace, agent_id, note, created_at);
+CREATE TABLE issues         (id INTEGER PK, workspace, severity, description, reporter, created_at);
+CREATE TABLE scope_requests (id INTEGER PK, workspace, agent_id, file_path, reason, status, resolved_at);
 ```
 
-#### Migration Path
+#### Deliverables ✅
 
-1. Keep file-based system as fallback during transition
-2. MCP handlers gain a `storage_backend` toggle (`file` | `spacetimedb`)
-3. SpacetimeDB runs locally (embedded) — no infrastructure needed
-4. Manifest import/export for compatibility with existing workflows
-
-#### Deliverables
-
-- SpacetimeDB module with tables and reducers
-- MCP server storage adapter (file ↔ SpacetimeDB)
-- Subscription-based agent notifications
-- Manifest import/export for backward compatibility
-- Local embedded deployment (zero infrastructure)
+- `StorageAdapter` interface with `FileStorageAdapter` bridge
+- `SQLiteStorageAdapter` with full CRUD for all 6 tables
+- `file-mutex.ts` for safe concurrent file access
+- Transparent fallback: SQLite unavailable → file-based storage  
+- Zero-config: DB created automatically on first use
 
 ---
 
-### Phase 5B: Qdrant — Long-Term Semantic Memory
+### Phase 5B: Qdrant — Long-Term Semantic Memory ✅
 
 Add vector-based semantic search across all agent outputs, code, and project history.
 
@@ -1110,27 +1062,27 @@ Upsert to Qdrant with metadata
 Available for future queries
 ```
 
-#### MCP Tools
+#### MCP Tools (implemented)
 
 | Tool | Description |
 |------|-------------|
+| `store_memory` | Embed and store text into Qdrant |
 | `semantic_search` | Query across all collections |
-| `index_project` | Trigger indexing for current project |
 | `find_similar_code` | Code-specific similarity search |
-| `find_past_solutions` | Search issues + resolutions |
+| `find_past_solutions` | Search issues + agent notes for solutions |
 
-#### Deliverables
+#### Deliverables ✅
 
-- Qdrant deployment (local Docker or embedded)
-- Embedding pipeline (configurable: local model or API)
-- Chunking strategies per content type
-- 4 new MCP tools for semantic search
-- Indexing triggers on swarm completion
-- Cross-project search in PM workflow
+- Qdrant integration via `QDRANT_URL` env var
+- `Xenova/all-MiniLM-L6-v2` embedding model (384-dim, cosine, lazy-loaded)
+- 4 MCP tools for semantic memory (store, search, code, solutions)
+- Auto-indexing: `post_handoff_note` auto-stores to `agent_notes` collection
+- Graceful degradation: returns informational message when Qdrant offline
+- 4 collections: `agent_notes`, `code_snippets`, `project_docs`, `issues`
 
 ---
 
-### Phase 5C: TimescaleDB — Historical Telemetry & Temporal RAG
+### Phase 5C: TimescaleDB — Historical Telemetry & Temporal RAG ✅
 
 Track all agent activity as time-series data for performance analysis, debugging, and "temporal RAG" (asking questions about what happened when).
 
@@ -1211,25 +1163,54 @@ Ask questions about historical agent behavior:
 | Busiest agent roles | `SELECT role, COUNT(*) FROM agent_events GROUP BY role ORDER BY count DESC` |
 | File conflict hotspots | `SELECT detail->>'file_path', COUNT(*) FROM agent_events WHERE event_type = 'issue_report' AND detail->>'severity' LIKE '%CONFLICT%' GROUP BY 1` |
 
-#### MCP Tools
+#### MCP Tools (implemented)
 
 | Tool | Description |
 |------|-------------|
-| `query_telemetry` | SQL-like queries over agent history |
-| `get_model_stats` | Model performance summary |
-| `get_swarm_history` | Past swarm runs with outcomes |
-| `compare_models` | Head-to-head model comparison for a role |
+| `get_my_telemetry` | Your recent tool calls for the current session |
+| `get_session_telemetry` | Aggregated telemetry for all agents |
+| `get_slow_operations` | Tool calls exceeding duration threshold |
+| `get_telemetry_summary` | High-level swarm telemetry summary |
+| `get_swarm_history` | Past swarm session summaries (Phase 6) |
+| `compare_models` | Head-to-head agent/model comparison (Phase 6) |
 
-#### Deliverables
+#### Deliverables ✅
 
-- TimescaleDB deployment (local Docker)
-- Event ingestion from MCP server (emit on every tool call)
-- Continuous aggregates for model/role performance
-- 4 new MCP tools for telemetry queries
-- Temporal RAG integration with PM workflow
-- Dashboard-ready query library
+- TimescaleDB deployment via Docker Compose (`docker-compose.test.yml`)
+- Dual-write telemetry pipeline: TSDB primary, SQLite fallback
+- `agent_events` hypertable + `model_performance` materialized view
+- 6 MCP tools for telemetry queries (4 core + 2 temporal RAG)
+- CI test runner (`scripts/ci-test.ps1`) for Part B integration tests
 
 ---
+
+## Phase 6: Temporal RAG & CI ✅
+
+Added cross-session analytical tools and CI infrastructure.
+
+### New MCP Tools
+
+| Tool | Domain | Description |
+|------|--------|-------------|
+| `get_swarm_history` | Telemetry | Past swarm session summaries: calls, duration, agents, failure rate |
+| `compare_models` | Telemetry | Head-to-head model comparison: avg duration, success rate |
+
+### CI Pipeline
+
+- `docker-compose.test.yml` — TimescaleDB + Qdrant containers for Part B tests
+- `scripts/ci-test.ps1` — Test runner with `-SkipPartB` and `-KeepContainers` flags
+- Part A tests: SQLite fallback (always run, no dependencies)
+- Part B tests: Live TSDB + Qdrant (require Docker)
+
+### Documentation Sync
+
+All docs updated to 41-tool state:
+- `README.md`, `TOOL-REFERENCE.md`, `MCP-COVERAGE-GAPS.md`
+- `tool-definitions.ts` header comment
+
+---
+
+## Future Phases
 
 ### Cockpit Extension Enhancements
 
