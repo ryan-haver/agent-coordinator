@@ -243,3 +243,68 @@ describe("Part A: Temporal RAG tools (SQLite)", () => {
         expect(text).toBeTruthy();
     });
 });
+
+// ── Part A: recordEvent lifecycle (EVENT_MAP dispatch) ────────────────
+
+describe("Part A: recordEvent lifecycle events", () => {
+    it("update_agent_status emits status_change event to telemetry buffer", async () => {
+        await server.callTool("create_swarm_manifest", {
+            mission: "Event test", workspace_root: fixture.tmpDir
+        });
+        await server.callTool("add_agent_to_manifest", {
+            agent_id: "α", role: "dev", model: "gemini", phase: "1",
+            scope: "src/", workspace_root: fixture.tmpDir
+        });
+        await server.callTool("update_agent_status", {
+            agent_id: "α", status: "🔄 Running", workspace_root: fixture.tmpDir
+        });
+
+        const db = openDb(fixture.tmpDir);
+        const rows = db.prepare(
+            "SELECT * FROM telemetry_buffer WHERE tool_name = 'update_agent_status'"
+        ).all() as Array<{ tool_name: string; success: number }>;
+        expect(rows.length).toBeGreaterThan(0);
+        expect(rows[0].success).toBe(1);
+        db.close();
+    });
+
+    it("claim_file emits file_claim event to telemetry buffer", async () => {
+        await server.callTool("create_swarm_manifest", {
+            mission: "Claim event test", workspace_root: fixture.tmpDir
+        });
+        await server.callTool("add_agent_to_manifest", {
+            agent_id: "β", role: "dev", model: "claude", phase: "1",
+            scope: "src/", workspace_root: fixture.tmpDir
+        });
+        await server.callTool("claim_file", {
+            agent_id: "β", file_path: "src/main.ts", workspace_root: fixture.tmpDir
+        });
+
+        const db = openDb(fixture.tmpDir);
+        const rows = db.prepare(
+            "SELECT * FROM telemetry_buffer WHERE tool_name = 'claim_file'"
+        ).all() as Array<{ tool_name: string; success: number }>;
+        expect(rows.length).toBeGreaterThan(0);
+        expect(rows[0].success).toBe(1);
+        db.close();
+    });
+
+    it("report_issue emits issue_report event to telemetry buffer", async () => {
+        await server.callTool("create_swarm_manifest", {
+            mission: "Issue event test", workspace_root: fixture.tmpDir
+        });
+        await server.callTool("report_issue", {
+            severity: "⚠️ Warning", area: "tests",
+            description: "Test issue for telemetry", reporter: "γ",
+            workspace_root: fixture.tmpDir
+        });
+
+        const db = openDb(fixture.tmpDir);
+        const rows = db.prepare(
+            "SELECT * FROM telemetry_buffer WHERE tool_name = 'report_issue'"
+        ).all() as Array<{ tool_name: string; success: number }>;
+        expect(rows.length).toBeGreaterThan(0);
+        expect(rows[0].success).toBe(1);
+        db.close();
+    });
+});
