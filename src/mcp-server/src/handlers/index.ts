@@ -43,6 +43,9 @@ import { handleRequestScopeExpansion, handleGrantScopeExpansion, handleDenyScope
 // Telemetry handlers
 import { handleGetMyTelemetry, handleGetSessionTelemetry, handleGetSlowOperations, handleGetTelemetrySummary } from "./telemetry.js";
 
+// Memory handlers (semantic search — soft dependency on Qdrant)
+import { handleStoreMemory, handleSemanticSearch, handleFindSimilarCode, handleFindPastSolutions } from "./memory.js";
+
 /**
  * Master tool handler map: tool name → handler function.
  * The index.ts router uses this to dispatch tool calls.
@@ -106,4 +109,10 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
     get_session_telemetry: handleGetSessionTelemetry,
     get_slow_operations: handleGetSlowOperations,
     get_telemetry_summary: handleGetTelemetrySummary,
+
+    // Semantic Memory (Qdrant — soft dependency)
+    store_memory: handleStoreMemory,
+    semantic_search: handleSemanticSearch,
+    find_similar_code: handleFindSimilarCode,
+    find_past_solutions: handleFindPastSolutions,
 };

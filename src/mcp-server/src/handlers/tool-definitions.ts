@@ -490,5 +490,60 @@ export const TOOL_DEFINITIONS = [
                 session_id: { type: "string", description: "Optional session ID filter" }
             }
         }
+    },
+    // ── Semantic Memory (Qdrant) — soft dependency ────────────────────────
+    {
+        name: "store_memory",
+        description: "Store text into semantic memory (Qdrant). Requires QDRANT_URL. No-op if Qdrant unavailable.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                text: { type: "string", description: "Text content to embed and store" },
+                collection: { type: "string", description: "Collection: agent_notes (default), code_snippets, project_docs, or issues" },
+                agent_id: { type: "string", description: "Agent that generated this content" },
+                file_path: { type: "string", description: "Source file path (for code_snippets)" },
+                phase: { type: "string", description: "Swarm phase when content was generated" },
+                workspace_root: { type: "string", description: "Optional workspace root override" }
+            },
+            required: ["text"]
+        }
+    },
+    {
+        name: "semantic_search",
+        description: "Search semantic memory by natural language query. Returns top-K similar items across all or one collection.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                query: { type: "string", description: "Natural language search query" },
+                collection: { type: "string", description: "Collection to search (agent_notes, code_snippets, project_docs, issues) or 'all' (default)" },
+                limit: { type: "number", description: "Max results to return (default: 5, max: 20)" }
+            },
+            required: ["query"]
+        }
+    },
+    {
+        name: "find_similar_code",
+        description: "Find semantically similar code snippets by describing what the code does. Searches code_snippets collection.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                query: { type: "string", description: "Description of what the code does (e.g. 'parse JWT token and extract claims')" },
+                file_path: { type: "string", description: "Optional: narrow to a specific file or directory prefix" },
+                limit: { type: "number", description: "Max results (default: 5)" }
+            },
+            required: ["query"]
+        }
+    },
+    {
+        name: "find_past_solutions",
+        description: "Search past issues and agent notes for solutions to similar problems. Searches issues + agent_notes collections.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                query: { type: "string", description: "Description of the problem (e.g. 'database connection timeout on high load')" },
+                limit: { type: "number", description: "Max results (default: 5)" }
+            },
+            required: ["query"]
+        }
     }
 ];

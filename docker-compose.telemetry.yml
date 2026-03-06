@@ -12,7 +12,21 @@ services:
       - agent_coordinator_tsdb_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "coordinator", "-d", "telemetry"]
+      test: [ "CMD", "pg_isready", "-U", "coordinator", "-d", "telemetry" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: agent-coordinator-qdrant
+    ports:
+      - "127.0.0.1:6333:6333"
+    volumes:
+      - agent_coordinator_qdrant_data:/qdrant/storage
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:6333/healthz" ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -20,3 +34,5 @@ services:
 volumes:
   agent_coordinator_tsdb_data:
     name: agent_coordinator_tsdb_data
+  agent_coordinator_qdrant_data:
+    name: agent_coordinator_qdrant_data

@@ -10,6 +10,7 @@ import {
     replaceTableInSection,
     serializeTableToString
 } from "../utils/manifest.js";
+import { getMemory } from "../memory/client.js";
 
 export async function handleBroadcastEvent(args: Record<string, unknown>): Promise<ToolResponse> {
     const { agent_id, event_type, message } = args as any;
@@ -99,6 +100,19 @@ export async function handlePostHandoffNote(args: Record<string, unknown>): Prom
             return { content: null, result: null };
         });
     } catch { /* manifest write failure is non-fatal */ }
+
+    // Auto-index into semantic memory (fire-and-forget, requires QDRANT_URL)
+    getMemory()?.store({
+        collection: "agent_notes",
+        text: formattedNote,
+        payload: {
+            agent_id,
+            session_id: progress.session_id,
+            workspace: wsRoot,
+            phase: progress.phase,
+            timestamp: new Date().toISOString()
+        }
+    }).catch(() => { /* non-fatal */ });
 
     return { toolResult: `Note posted by ${agent_id}`, content: [{ type: "text", text: `Note posted: ${formattedNote}` }] };
 }

@@ -15,6 +15,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { initStorage, getStorage } from "./storage/singleton.js";
 import { initTelemetry, getTelemetry, summarizeArgs } from "./telemetry/client.js";
+import { initMemory } from "./memory/client.js";
 import path from "path";
 import os from "os";
 import fs from "fs";
@@ -154,6 +155,10 @@ async function main() {
     const wsRoot = resolveWorkspaceRoot();
     const telemetry = initTelemetry(wsRoot, "");
     console.error(`[agent-coordinator] Telemetry: ${process.env.TSDB_URL ? "enabled" : "local-only"}`);
+
+    // Init semantic memory (soft dependency — no-ops if QDRANT_URL not set)
+    await initMemory();
+    console.error(`[agent-coordinator] Semantic memory: ${process.env.QDRANT_URL ? "enabled" : "disabled (QDRANT_URL not set)"}`);
 
     // Graceful shutdown
     process.on("SIGINT", () => { telemetry.shutdown().finally(() => process.exit(0)); });
