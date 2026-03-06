@@ -1,5 +1,5 @@
 /**
- * MCP Tool Definitions — all 39 tool schemas in one place.
+ * MCP Tool Definitions — all 41 tool schemas in one place.
  * Extracted from the monolithic index.ts for maintainability.
  */
 
@@ -544,6 +544,26 @@ export const TOOL_DEFINITIONS = [
                 limit: { type: "number", description: "Max results (default: 5)" }
             },
             required: ["query"]
+        }
+    },
+    {
+        name: "get_swarm_history",
+        description: "Returns summary of past swarm sessions: total calls, duration, agent count, failure rate. Falls back to SQLite when TimescaleDB is offline.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                limit: { type: "number", description: "Max sessions to return (default: 10, max: 50)" }
+            }
+        }
+    },
+    {
+        name: "compare_models",
+        description: "Head-to-head model/agent comparison: avg duration, success rate, call count. Compares performance across agents within a session or globally.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                session_id: { type: "string", description: "Optional session to narrow comparison" }
+            }
         }
     }
 ];

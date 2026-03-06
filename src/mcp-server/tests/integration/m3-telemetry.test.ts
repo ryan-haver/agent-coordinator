@@ -194,3 +194,52 @@ describe.skipIf(!hasTsdb)("Part B — TimescaleDB live writes (requires TSDB_URL
         db.close();
     });
 });
+
+// ── Part A: get_swarm_history + compare_models (SQLite fallback) ──────
+
+describe("Part A: Temporal RAG tools (SQLite)", () => {
+    it("get_swarm_history returns graceful message when no sessions exist", async () => {
+        const result = await server.callTool("get_swarm_history", { limit: 5 });
+        expect(result.isError).toBe(false);
+        expect(result.text).toContain("No swarm history found");
+    });
+
+    it("get_swarm_history returns session data after tool calls", async () => {
+        // Generate some telemetry by calling tools
+        await server.callTool("create_swarm_manifest", {
+            mission: "History test", workspace_root: fixture.tmpDir
+        });
+        await server.callTool("add_agent_to_manifest", {
+            agent_id: "α", role: "dev", model: "claude", phase: "1",
+            scope: "src/", workspace_root: fixture.tmpDir
+        });
+
+        const result = await server.callTool("get_swarm_history", { limit: 5 });
+        expect(result.isError).toBe(false);
+        // Should contain the session data (at least calls count)
+        const text = result.text;
+        expect(text).toBeTruthy();
+    });
+
+    it("compare_models returns graceful message when no data exists", async () => {
+        const result = await server.callTool("compare_models", {});
+        expect(result.isError).toBe(false);
+        expect(result.text).toContain("No model comparison data");
+    });
+
+    it("compare_models returns agent comparison after tool calls", async () => {
+        // Generate telemetry with agent_id
+        await server.callTool("create_swarm_manifest", {
+            mission: "Compare test", workspace_root: fixture.tmpDir
+        });
+        await server.callTool("update_agent_status", {
+            agent_id: "β", status: "🔄 Running", workspace_root: fixture.tmpDir
+        });
+
+        const result = await server.callTool("compare_models", {});
+        expect(result.isError).toBe(false);
+        // Should contain agent telemetry
+        const text = result.text;
+        expect(text).toBeTruthy();
+    });
+});

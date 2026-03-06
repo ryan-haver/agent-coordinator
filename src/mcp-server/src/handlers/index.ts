@@ -41,7 +41,7 @@ import { handleLogFusebasePending, handleSyncFusebasePending, handleGetFusebaseS
 import { handleRequestScopeExpansion, handleGrantScopeExpansion, handleDenyScopeExpansion } from "./scope.js";
 
 // Telemetry handlers
-import { handleGetMyTelemetry, handleGetSessionTelemetry, handleGetSlowOperations, handleGetTelemetrySummary } from "./telemetry.js";
+import { handleGetMyTelemetry, handleGetSessionTelemetry, handleGetSlowOperations, handleGetTelemetrySummary, handleGetSwarmHistory, handleCompareModels } from "./telemetry.js";
 
 // Memory handlers (semantic search — soft dependency on Qdrant)
 import { handleStoreMemory, handleSemanticSearch, handleFindSimilarCode, handleFindPastSolutions } from "./memory.js";
@@ -109,6 +109,8 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
     get_session_telemetry: handleGetSessionTelemetry,
     get_slow_operations: handleGetSlowOperations,
     get_telemetry_summary: handleGetTelemetrySummary,
+    get_swarm_history: handleGetSwarmHistory,
+    compare_models: handleCompareModels,
 
     // Semantic Memory (Qdrant — soft dependency)
     store_memory: handleStoreMemory,

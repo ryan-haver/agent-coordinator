@@ -319,3 +319,101 @@ function formatTelemetryRows(rows: any[], title: string): string {
     }
     return lines.join("\n");
 }
+
+// ── Tool: get_swarm_history ──────────────────────────────────────────
+
+/**
+ * Returns summary of past swarm sessions: total calls, duration, agent count, failure rate.
+ * Falls back to SQLite when TSDB is offline.
+ */
+export const handleGetSwarmHistory: ToolHandler = async (args) => {
+    const limit = Math.min(Number(args.limit ?? 10), 50);
+    const telemetry = getTelemetry();
+
+    if (!telemetry) {
+        return { content: [{ type: "text" as const, text: "Telemetry not initialized." }] };
+    }
+
+    const sql = `SELECT session_id,
+                        COUNT(*)                                      AS total_calls,
+                        COUNT(DISTINCT agent_id)                       AS agent_count,
+                        AVG(duration_ms)                               AS avg_duration_ms,
+                        SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END)  AS failures,
+                        MIN(ts)                                        AS started,
+                        MAX(ts)                                        AS ended
+                 FROM telemetry_buffer
+                 WHERE session_id != ''
+                 GROUP BY session_id
+                 ORDER BY MAX(ts) DESC
+                 LIMIT ?`;
+
+    const rows = telemetry.queryLocal(sql, [limit]);
+
+    if (rows.length === 0) {
+        return { content: [{ type: "text" as const, text: "No swarm history found." }] };
+    }
+
+    const lines = [
+        `Swarm History — ${rows.length} sessions`,
+        "",
+        `${"Session".padEnd(20)} ${"Calls".padEnd(8)} ${"Agents".padEnd(8)} ${"Fails".padEnd(8)} ${"Avg ms".padEnd(8)} Started`,
+        "─".repeat(70),
+        ...rows.map((r: any) =>
+            `${String(r.session_id).slice(0, 18).padEnd(20)} ${String(r.total_calls).padEnd(8)} ${String(r.agent_count).padEnd(8)} ${String(r.failures ?? 0).padEnd(8)} ${String(Math.round(r.avg_duration_ms ?? 0)).padEnd(8)} ${String(r.started).slice(0, 19)}`
+        )
+    ];
+
+    return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+};
+
+// ── Tool: compare_models ─────────────────────────────────────────────
+
+/**
+ * Head-to-head model comparison: avg duration, success rate, call count per agent.
+ * Falls back to SQLite when TSDB is offline.
+ */
+export const handleCompareModels: ToolHandler = async (args) => {
+    const sessionId = String(args.session_id ?? "");
+    const telemetry = getTelemetry();
+
+    if (!telemetry) {
+        return { content: [{ type: "text" as const, text: "Telemetry not initialized." }] };
+    }
+
+    // SQLite doesn't have agent model info in telemetry_buffer,
+    // so we use agent_id as a proxy (each agent maps to a model).
+    const where = sessionId ? "WHERE session_id = ?" : "";
+    const params = sessionId ? [sessionId] : [];
+
+    const rows = telemetry.queryLocal(
+        `SELECT agent_id,
+                COUNT(*)                                      AS total_calls,
+                ROUND(AVG(duration_ms))                       AS avg_duration_ms,
+                SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS successes,
+                SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) AS failures,
+                MIN(ts) AS first_seen,
+                MAX(ts) AS last_seen
+         FROM telemetry_buffer ${where}
+         GROUP BY agent_id
+         ORDER BY total_calls DESC`,
+        params
+    );
+
+    if (rows.length === 0) {
+        return { content: [{ type: "text" as const, text: "No model comparison data available." }] };
+    }
+
+    const lines = [
+        `Model Comparison${sessionId ? ` — Session: ${sessionId}` : " — All sessions"}`,
+        "",
+        `${"Agent/Model".padEnd(14)} ${"Calls".padEnd(8)} ${"Avg ms".padEnd(8)} ${"Success%".padEnd(10)} ${"Failures".padEnd(10)} Last seen`,
+        "─".repeat(70),
+        ...rows.map((r: any) => {
+            const total = Number(r.total_calls || 1);
+            const successPct = Math.round(100 * Number(r.successes ?? 0) / total);
+            return `${String(r.agent_id || "(none)").slice(0, 12).padEnd(14)} ${String(r.total_calls).padEnd(8)} ${String(r.avg_duration_ms ?? 0).padEnd(8)} ${(successPct + "%").padEnd(10)} ${String(r.failures ?? 0).padEnd(10)} ${String(r.last_seen).slice(0, 19)}`;
+        })
+    ];
+
+    return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+};
