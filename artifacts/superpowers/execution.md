@@ -1,45 +1,45 @@
-# Execution Log — Integration Test Framework
+# M4 Execution Log
 
-## Step I.1 — Integration test harness ✅
+## Step 4.1 — Docker Compose: Qdrant service ✅
 
-- **Files:** `tests/integration/helpers/server.ts` [NEW], `tests/integration/helpers/fixtures.ts` [NEW], `tsconfig.test.json` [NEW], `package.json` (+test:integration, +test:all)
-- `createTestServer()` uses `InMemoryTransport` — real server+client, no stdio subprocess
-- Fixed import depth: `../../../src/` from `tests/integration/helpers/`
-- **Verify:** `npx tsc --noEmit` → pass | `npx tsc -p tsconfig.test.json --noEmit` → pass
+- **Files:** `docker-compose.telemetry.yml` [MODIFY], `.env.example` [NEW]
+- Added `qdrant` service (port 6333, named volume, healthcheck)
+- Created `.env.example` documenting all environment variables
 
-## Step I.2 — M1 handler integration tests ✅
+## Step 4.2 — Memory client ✅
 
-- **Files:** `tests/integration/m1-handlers.test.ts` [NEW]
-- 15 test cases: tool registration (list/unknown), manifest CRUD, agent lifecycle (add/update/fail), file claims (claim/check/release/conflict), events, handoff notes, phase gates, swarm status
-- Fixed arg mismatches from handlers: `file_path` (not `file`), `phase_number`, `reporter`, `status`
-- **Verify:** `npm run test:integration -- tests/integration/m1-handlers.test.ts` → 1 file, all pass
+- **Files:** `src/memory/client.ts` [NEW], `src/memory/collections.ts` [NEW]
+- `MemoryClient`: embed + upsert + search, lazy `@xenova/transformers` pipeline
+- Soft dependency: QDRANT_URL not set → all ops are silent no-ops
+- 4 collections: `agent_notes`, `code_snippets`, `project_docs`, `issues` (384-dim cosine)
 
-## Step I.3 — M2 SQLite integration tests ✅
+## Step 4.3 — npm dependencies ✅
 
-- **Files:** `tests/integration/m2-sqlite.test.ts` [NEW]
-- 9 tests: DB creation, schema v2, manifest_content storage, agents in manifest blob, agent_progress table, file_claims table via claim_file, full round-trip
-- Key finding: `add_agent_to_manifest` writes to `manifest_content` blob, not the `agents` table — assertions updated accordingly
-- **Verify:** `npm run test:integration -- tests/integration/m2-sqlite.test.ts` → all pass
+- **Files:** `package.json` [MODIFY]
+- `@xenova/transformers@^2.17.0`, `@qdrant/js-client-rest@^1.9.0`
 
-## Step I.4 — M3 telemetry integration tests ✅
+## Step 4.4 — 4 new MCP tools ✅
 
-- **Files:** `tests/integration/m3-telemetry.test.ts` [NEW]
-- Part A (7 tests, always runs): SQLite buffer writes, success/failure recording, duration_ms, args_summary, and 4 MCP telemetry query tools
-- Part B (2 tests, TSDB_URL required): live TSDB writes + drainBuffer — skipped when TSDB_URL not set
-- **Verify:** `npm run test:integration` → 31 pass, 2 skip
+- **Files:** `src/handlers/memory.ts` [NEW], `tool-definitions.ts` [MODIFY], `handlers/index.ts` [MODIFY], `src/index.ts` [MODIFY]
+- Tools: `store_memory`, `semantic_search`, `find_similar_code`, `find_past_solutions`
+- Total MCP tools: 35 → 39
+- `initMemory()` wired into server startup
+- **Bug fix:** Moved collection validation before `isReady()` check — invalid collections always throw
 
-## Step I.5 — Milestone gate script ✅
+## Step 4.5 — Auto-index handoff notes ✅
 
-- **Files:** `scripts/integration-gate.ps1` [NEW]
-- 3 steps: tsc (prod + test), `npm test`, `npm run test:integration`
-- Colored output, exits 0 only on full pass
-- **Verify:** `pwsh scripts/integration-gate.ps1` → exit 0 ✅
+- **Files:** `src/handlers/events.ts` [MODIFY]
+- `post_handoff_note` now fire-and-forgets `getMemory()?.store()` into `agent_notes`
 
-## Step I.6 — Run gates M1-M3 ✅
+## Step 4.6 — M4 integration tests ✅
 
-- **Results:**
-  - `npx tsc --noEmit` → ✅ pass
-  - `npx tsc -p tsconfig.test.json --noEmit` → ✅ pass
-  - `npm test` (unit suite) → ✅ 74/74 pass
-  - `npm run test:integration` → ✅ 31 pass, 2 skip (TSDB Part B)
-  - `pwsh scripts/integration-gate.ps1` → ✅ exit 0
+- **Files:** `tests/integration/m4-qdrant.test.ts` [NEW]
+- Part A (7 tests): graceful no-op, validation errors
+- Part B (4 tests): live Qdrant — skip when `QDRANT_URL` not set
+- `npx vitest run tests/integration/m4-qdrant.test.ts` → **7 pass, 4 skip**
+
+## Step 4.7 — Milestone gate ✅
+
+- `npx tsc --noEmit` → ✅
+- `npm test` (unit) → ✅ 74 pass
+- `npm run test:integration` → ✅ 38 pass, 6 skip (4 files)

@@ -1,9 +1,9 @@
 # MCP Server Coverage Gaps
 
-> **Last updated:** 2026-02-22
-> **Current coverage:** 100% of agent lifecycle (35 tools)
+> **Last updated:** 2026-03-05
+> **Current coverage:** 100% of agent lifecycle + telemetry + semantic memory (39 tools)
 > **Gap 19** (git branch coordination) remains intentional — agents have git CLI access
-> **Commits:** `96bbc93` (round 1) + `4d200dd` (round 2)
+> **Commits:** `96bbc93` (round 1) + `4d200dd` (round 2) + Phase 5 (M1-M4)
 
 This document tracks known gaps in MCP tool coverage and their resolution status.
 
@@ -11,7 +11,7 @@ This document tracks known gaps in MCP tool coverage and their resolution status
 
 ## Status: ✅ All Implemented
 
-Every gap identified has been implemented across multiple rounds. The MCP server now provides **35 tools** covering the full agent lifecycle, coordinator workflow, multi-workspace awareness, error recovery, scope negotiation, and Fusebase dual-write resilience.
+Every gap identified has been implemented across multiple rounds. The MCP server now provides **39 tools** covering the full agent lifecycle, coordinator workflow, multi-workspace awareness, error recovery, scope negotiation, Fusebase dual-write resilience, telemetry observability, and semantic memory search.
 
 ### Gap Resolution Summary
 
@@ -43,6 +43,14 @@ Every gap identified has been implemented across multiple rounds. The MCP server
 | 24 | Remove agent from manifest | `remove_agent_from_manifest` | P3 | ✅ |
 | 25 | Update agent in manifest | `update_agent_in_manifest` | P3 | ✅ |
 | 26 | Claim file scope enforcement | `claim_file` +scope check | P1 | ✅ |
+| 27 | Telemetry: agent tool history | `get_my_telemetry` | P1 | ✅ |
+| 28 | Telemetry: session overview | `get_session_telemetry` | P2 | ✅ |
+| 29 | Telemetry: slow operations | `get_slow_operations` | P2 | ✅ |
+| 30 | Telemetry: swarm summary | `get_telemetry_summary` | P1 | ✅ |
+| 31 | Semantic memory: store | `store_memory` | P2 | ✅ |
+| 32 | Semantic memory: search | `semantic_search` | P1 | ✅ |
+| 33 | Semantic memory: code similarity | `find_similar_code` | P2 | ✅ |
+| 34 | Semantic memory: past solutions | `find_past_solutions` | P1 | ✅ |
 
 ---
 
@@ -104,10 +112,12 @@ Every gap identified has been implemented across multiple rounds. The MCP server
 ## Architecture Notes
 
 ### New Infrastructure Created
+
 - **`swarm-registry.ts`** — Global swarm registry at `~/.antigravity-configs/swarm_registry.json`
 - **Event System** — Per-session events at `~/.antigravity-configs/swarm_events/`
 - **Swarm Archives** — `.swarm-archives/` created by `complete_swarm`
 
 ### Future Considerations
+
 - Gap 19 (git integration) could be revisited if multi-agent branch collisions become common
 - Quota reservation system (Gap 14) is partially addressed — `check_quota` reads live data but doesn't reserve

@@ -5,6 +5,7 @@
 ## The Problem
 
 Coding with AI hits the same walls:
+
 - **Context overflow** — the model forgets what it learned 500 messages ago
 - **Reasoning loops** — stuck on the same bug, 5th attempt, same approach
 - **Wrong model for the job** — using a heavy reasoner for formatting, or a speed model for architecture
@@ -21,7 +22,7 @@ Agent Coordinator is a **6-part coordination system** installed into your Antigr
 | **Consultation** | Lightweight cross-model Q&A without losing context | Stuck on a specific problem |
 | **NotebookLM** | Research brain — query knowledge, initiate deep research | Unfamiliar territory, knowledge gaps |
 | **Fusebase** | Persistent artifact storage with dual-write to local | Deliverables, tracking, collaboration |
-| **MCP Server** | Programmatic manifest management via 35 MCP tools | Automated coordination |
+| **MCP Server** | Programmatic manifest management via 39 MCP tools | Automated coordination |
 
 ### Escalation Ladder
 
@@ -72,6 +73,24 @@ chmod +x uninstall.sh && ./uninstall.sh
 ---
 
 ## Architecture
+
+### Data Layer (Phase 5)
+
+The MCP server uses a **three-backend architecture** — each backend is a soft dependency:
+
+| Backend | Role | Port | Required? |
+|---------|------|------|-----------|
+| **SQLite** | Working memory — manifest, agents, file claims, progress | Embedded | Optional (file-based default) |
+| **TimescaleDB** | Telemetry — tool call history, duration, success rates | 5433 | No — buffers to SQLite |
+| **Qdrant** | Semantic memory — vector search across notes, code, docs | 6333 | No — tools return "not configured" |
+
+```
+MCP Client → Server Router → Telemetry Instrumentation → Handler → StorageAdapter
+                                    ↓                                    ↓
+                              SQLite Buffer                     File or SQLite backend
+                                    ↓
+                         TimescaleDB (if connected)
+```
 
 ### Three-Layer Loading
 
@@ -200,64 +219,55 @@ Problems found during execution with severity
 
 ```
 agent-coordinator/
-├── install.ps1                            ← Windows installer
-├── install.sh                             ← macOS/Linux installer
-├── uninstall.ps1                          ← Windows uninstaller
-├── uninstall.sh                           ← macOS/Linux uninstaller
+├── install.ps1 / install.sh               ← Installers
+├── uninstall.ps1 / uninstall.sh           ← Uninstallers
 ├── README.md                              ← This file
+├── docker-compose.telemetry.yml           ← TimescaleDB + Qdrant services
+├── .env.example                           ← All environment variables
 │
 ├── docs/
+│   ├── ARCHITECTURE.md                    ← System architecture & data flow
+│   ├── TOOL-REFERENCE.md                  ← All 39 MCP tools (auto-generated)
+│   ├── OPERATIONS.md                      ← Setup, Docker, troubleshooting
+│   ├── DEVELOPER-GUIDE.md                 ← Adding tools, testing, patterns
 │   ├── CUSTOMIZATION.md                   ← Configuration guide
-│   └── ROADMAP.md                         ← Unified roadmap (Phases 1A–5)
+│   ├── ROADMAP.md                         ← Unified roadmap (Phases 1A–5)
+│   ├── manifest-reference.md              ← Swarm manifest sections
+│   └── MCP-COVERAGE-GAPS.md               ← Tool coverage tracker
+│
+├── scripts/
+│   └── integration-gate.ps1               ← Mandatory milestone gate
 │
 └── src/
-    ├── GEMINI.md                          ← Layer 1 — global instructions
-    ├── model_fallback.json                ← Model config with discovery info
-    ├── gitignore-global                   ← Git protection for manifests
+    ├── GEMINI.md                           ← Layer 1 — global instructions
+    ├── model_fallback.json                 ← Model config with discovery info
+    ├── skill/ / rules/ / workflows/        ← Layers 2 & 3
+    ├── templates/                          ← Manifest + agent prompt templates
     │
-    ├── skill/
-    │   └── SKILL.md                       ← Layer 2 — full protocol (handoff + swarm + consultation)
-    │
-    ├── rules/
-    │   ├── handoff.md                     ← Auto-trigger handoff rule
-    │   └── context_compression.md         ← Auto-compression rule
-    │
-    ├── workflows/
-    │   ├── pivot.md                       ← /pivot workflow
-    │   ├── resume.md                      ← /resume workflow
-    │   ├── health.md                      ← /health workflow
-    │   ├── swarm.md                       ← /swarm workflow (supervised)
-    │   ├── swarm-auto.md                  ← /swarm-auto workflow (rapid)
-    │   ├── consult.md                     ← /consult workflow
-    │   └── status.md                      ← /status workflow
-    │
-    ├── scripts/
-    │   ├── auto_mode_toggle.ps1            ← Toggle autonomous settings (Windows)
-    │   ├── auto_mode_toggle.sh             ← Toggle autonomous settings (macOS/Linux)
-    │   ├── quota_check.ps1                 ← Direct Quota API check (Windows)
-    │   └── quota_check.sh                  ← Direct Quota API check (macOS/Linux)
-    │
-    ├── mcp-server/                         ← MCP Coordination Server (TypeScript)
-    │   ├── package.json
-    │   ├── tsconfig.json
-    │   └── src/
-    │       ├── index.ts                    ← Main entry point (10 tools + 2 resources)
-    │       └── utils/manifest.ts           ← Markdown table parser/serializer
-    │
-    └── templates/
-        ├── handoff_manifest.md            ← Handoff manifest template
-        ├── swarm-manifest.md              ← Swarm manifest template
-        ├── spec.md                        ← Spec template (for PM agent)
-        └── agent-prompts/                 ← 9 agent prompt templates
-            ├── project-manager.md
-            ├── architect.md
-            ├── developer.md
-            ├── debugger.md
-            ├── qa.md
-            ├── code-reviewer.md
-            ├── devops.md
-            ├── explorer.md
-            └── researcher.md
+    └── mcp-server/                         ← MCP Coordination Server (39 tools)
+        ├── package.json / tsconfig.json
+        └── src/
+            ├── index.ts                    ← Thin router + telemetry instrumentation
+            ├── handlers/                   ← 10 domain handler modules + tool-definitions.ts
+            │   ├── agents.ts               ← Agent lifecycle (9 tools)
+            │   ├── manifest.ts             ← Manifest CRUD (3 tools)
+            │   ├── files.ts                ← File claims (3 tools)
+            │   ├── phases.ts               ← Phase gates (4 tools)
+            │   ├── events.ts               ← Events & handoff notes (5 tools)
+            │   ├── swarm.ts                ← Swarm lifecycle (4 tools)
+            │   ├── memory.ts               ← Semantic memory (4 tools)
+            │   ├── telemetry.ts            ← Telemetry queries (4 tools)
+            │   ├── scope.ts                ← Scope negotiation (3 tools)
+            │   └── quota.ts / fusebase.ts  ← Quota + Fusebase (4 tools)
+            ├── storage/                    ← StorageAdapter + 2 implementations
+            │   ├── adapter.ts              ← Interface + domain types
+            │   ├── file-adapter.ts          ← File-based backend
+            │   └── sqlite-adapter.ts        ← SQLite backend
+            ├── telemetry/                  ← Dual-write telemetry pipeline
+            │   └── client.ts               ← SQLite buffer + TSDB drain
+            └── memory/                     ← Qdrant semantic memory
+                ├── client.ts               ← MemoryClient + embeddings
+                └── collections.ts          ← 4 collection definitions
 ```
 
 ---
@@ -275,4 +285,7 @@ See [ROADMAP.md](docs/ROADMAP.md) for the full plan:
 | **2B** | Fusebase Integration (artifact storage) | ✅ Complete |
 | **3** | Cockpit Quota Awareness | ✅ Complete |
 | **4** | Direct Quota API | ✅ Complete |
-| **5** | Advanced Capabilities | Future |
+| **5A** | SQLite Storage Backend | ✅ Complete |
+| **5B** | TimescaleDB Telemetry | ✅ Complete |
+| **5C** | Qdrant Semantic Memory | ✅ Complete |
+| **5D** | Documentation | ✅ Complete |
