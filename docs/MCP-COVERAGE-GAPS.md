@@ -1,7 +1,7 @@
 # MCP Server Coverage Gaps
 
 > **Last updated:** 2026-03-05
-> **Current coverage:** 100% of agent lifecycle + telemetry + semantic memory (39 tools)
+> **Current coverage:** 100% of agent lifecycle + telemetry + semantic memory (41 tools)
 > **Gap 19** (git branch coordination) remains intentional — agents have git CLI access
 > **Commits:** `96bbc93` (round 1) + `4d200dd` (round 2) + Phase 5 (M1-M4)
 
@@ -11,7 +11,7 @@ This document tracks known gaps in MCP tool coverage and their resolution status
 
 ## Status: ✅ All Implemented
 
-Every gap identified has been implemented across multiple rounds. The MCP server now provides **39 tools** covering the full agent lifecycle, coordinator workflow, multi-workspace awareness, error recovery, scope negotiation, Fusebase dual-write resilience, telemetry observability, and semantic memory search.
+Every gap identified has been implemented across multiple rounds. The MCP server now provides **41 tools** covering the full agent lifecycle, coordinator workflow, multi-workspace awareness, error recovery, scope negotiation, Fusebase dual-write resilience, telemetry observability, semantic memory search, and temporal RAG queries.
 
 ### Gap Resolution Summary
 
@@ -51,6 +51,8 @@ Every gap identified has been implemented across multiple rounds. The MCP server
 | 32 | Semantic memory: search | `semantic_search` | P1 | ✅ |
 | 33 | Semantic memory: code similarity | `find_similar_code` | P2 | ✅ |
 | 34 | Semantic memory: past solutions | `find_past_solutions` | P1 | ✅ |
+| 35 | Temporal RAG: swarm history | `get_swarm_history` | P2 | ✅ |
+| 36 | Temporal RAG: model comparison | `compare_models` | P2 | ✅ |
 
 ---
 

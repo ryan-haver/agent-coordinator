@@ -1,6 +1,6 @@
 # MCP Tool Reference
 
-> **39 tools** across 10 domains. Last updated: 2026-03-05.
+> **41 tools** across 10 domains. Last updated: 2026-03-06.
 >
 > Backend indicators: 📁 File | 🗃️ SQLite | 📊 TimescaleDB | 🧠 Qdrant
 
@@ -49,10 +49,12 @@
 | 37 | `get_session_telemetry` | Telemetry | 📊 🗃️ | Aggregated telemetry for all agents in session |
 | 38 | `get_slow_operations` | Telemetry | 📊 🗃️ | Tool calls exceeding duration threshold |
 | 39 | `get_telemetry_summary` | Telemetry | 📊 🗃️ | High-level swarm telemetry summary |
-| 36 | `store_memory` | Memory | 🧠 | Embed and store text into Qdrant |
-| 37 | `semantic_search` | Memory | 🧠 | Search semantic memory by natural language |
-| 38 | `find_similar_code` | Memory | 🧠 | Find similar code snippets |
-| 39 | `find_past_solutions` | Memory | 🧠 | Search past issues and notes for solutions |
+| 40 | `get_swarm_history` | Telemetry | 📊 🗃️ | Past swarm session summaries |
+| 41 | `compare_models` | Telemetry | 📊 🗃️ | Head-to-head agent/model comparison |
+| 42 | `store_memory` | Memory | 🧠 | Embed and store text into Qdrant |
+| 43 | `semantic_search` | Memory | 🧠 | Search semantic memory by natural language |
+| 44 | `find_similar_code` | Memory | 🧠 | Find similar code snippets |
+| 45 | `find_past_solutions` | Memory | 🧠 | Search past issues and notes for solutions |
 
 ---
 
@@ -429,7 +431,7 @@ Deny a pending scope expansion request.
 
 ---
 
-## Telemetry (4 tools) 📊 🗃️
+## Telemetry (6 tools) 📊 🗃️
 
 > **Soft dependency:** Falls back to local SQLite buffer when TimescaleDB is offline.
 
@@ -468,6 +470,22 @@ High-level swarm telemetry summary: total calls, avg duration, failure rate, top
 | Arg | Type | Required | Description |
 |-----|------|----------|-------------|
 | `session_id` | string | | Filter to this session |
+
+### `get_swarm_history`
+
+Past swarm session summaries: total calls, duration, agent count, failure rate.
+
+| Arg | Type | Required | Description |
+|-----|------|----------|-------------|
+| `limit` | number | | Max sessions to return (default: 10, max: 50) |
+
+### `compare_models`
+
+Head-to-head agent/model comparison: avg duration, success rate, call count.
+
+| Arg | Type | Required | Description |
+|-----|------|----------|-------------|
+| `session_id` | string | | Optional session to narrow comparison |
 
 ---
 

@@ -22,7 +22,7 @@ Agent Coordinator is a **6-part coordination system** installed into your Antigr
 | **Consultation** | Lightweight cross-model Q&A without losing context | Stuck on a specific problem |
 | **NotebookLM** | Research brain — query knowledge, initiate deep research | Unfamiliar territory, knowledge gaps |
 | **Fusebase** | Persistent artifact storage with dual-write to local | Deliverables, tracking, collaboration |
-| **MCP Server** | Programmatic manifest management via 39 MCP tools | Automated coordination |
+| **MCP Server** | Programmatic manifest management via 41 MCP tools | Automated coordination |
 
 ### Escalation Ladder
 
