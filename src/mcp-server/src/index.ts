@@ -22,7 +22,7 @@ import fs from "fs";
 
 import { TOOL_DEFINITIONS } from "./handlers/tool-definitions.js";
 import { TOOL_HANDLERS } from "./handlers/index.js";
-import { resolveWorkspaceRoot, globalConfigPath } from "./handlers/context.js";
+import { resolveWorkspaceRoot, getGlobalConfigPath } from "./handlers/context.js";
 
 // Read version from package.json at startup
 const PKG = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([a-zA-Z]:)/, '$1')), '..', '..', 'package.json'), 'utf8'));
@@ -42,7 +42,7 @@ const server = new Server(
 
 // Helper for finding model_fallback.json
 function getModelsConfigPath(): string {
-    const local = path.join(globalConfigPath, "model_fallback.json");
+    const local = path.join(getGlobalConfigPath(), "model_fallback.json");
     if (fs.existsSync(local)) return local;
     return "";
 }

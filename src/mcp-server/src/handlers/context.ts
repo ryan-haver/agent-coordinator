@@ -5,6 +5,12 @@ import path from "path";
 import os from "os";
 import fs from "fs";
 
+/** Returns the global config directory, overridable via ANTIGRAVITY_CONFIG_DIR */
+export function getGlobalConfigPath(): string {
+    return process.env.ANTIGRAVITY_CONFIG_DIR
+        ?? path.join(os.homedir(), ".antigravity-configs");
+}
+/** @deprecated Use getGlobalConfigPath() for env-overridable path */
 export const globalConfigPath = path.join(os.homedir(), ".antigravity-configs");
 
 /**

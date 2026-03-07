@@ -5,7 +5,7 @@
  */
 import path from "path";
 import fs from "fs";
-import { resolveWorkspaceRoot, globalConfigPath, type ToolResponse } from "./context.js";
+import { resolveWorkspaceRoot, getGlobalConfigPath, type ToolResponse } from "./context.js";
 import { getStorage } from "../storage/singleton.js";
 import {
     getTableFromSection,
@@ -20,7 +20,7 @@ export async function handleCreateSwarmManifest(args: Record<string, unknown>): 
     const supervision = (args?.supervision_level as string) || "Full";
     const storage = getStorage();
 
-    const templatePath = path.join(globalConfigPath, "templates", "swarm-manifest.md");
+    const templatePath = path.join(getGlobalConfigPath(), "templates", "swarm-manifest.md");
     if (!fs.existsSync(templatePath)) throw new Error("Template not found");
     let content = fs.readFileSync(templatePath, "utf8");
 

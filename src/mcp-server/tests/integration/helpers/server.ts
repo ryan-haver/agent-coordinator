@@ -9,6 +9,7 @@
  *   const result = await callTool("create_swarm_manifest", { mission: "test" });
  *   await close();
  */
+import path from "path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -56,6 +57,9 @@ export async function createTestServer(
 
     // Set required env vars
     process.env.WORKSPACE_ROOT = options.workspaceRoot ?? tmpDir;
+    // Point handlers to test fixture's config dir (has provisioned templates)
+    const configDir = path.join(tmpDir, ".config");
+    process.env.ANTIGRAVITY_CONFIG_DIR = configDir;
     if (disableTelemetry) process.env.TELEMETRY_ENABLED = "false";
     process.env.STORAGE_BACKEND = backend;
 
@@ -156,6 +160,7 @@ export async function createTestServer(
             delete process.env.WORKSPACE_ROOT;
             delete process.env.STORAGE_BACKEND;
             delete process.env.TELEMETRY_ENABLED;
+            delete process.env.ANTIGRAVITY_CONFIG_DIR;
         }
     };
 }

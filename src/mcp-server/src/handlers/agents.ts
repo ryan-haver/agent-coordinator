@@ -7,7 +7,7 @@
  */
 import path from "path";
 import fs from "fs";
-import { resolveWorkspaceRoot, globalConfigPath, type ToolResponse } from "./context.js";
+import { resolveWorkspaceRoot, getGlobalConfigPath, type ToolResponse } from "./context.js";
 import { getStorage } from "../storage/singleton.js";
 import {
     getTableFromSection,
@@ -281,7 +281,7 @@ export async function handleGetAgentPrompt(args: Record<string, unknown>): Promi
 
     if (!/^[a-z0-9-]+$/i.test(role)) throw new Error(`Invalid role name: ${role}`);
 
-    const promptPath = path.join(globalConfigPath, "templates", "agent-prompts", `${role}.md`);
+    const promptPath = path.join(getGlobalConfigPath(), "templates", "agent-prompts", `${role}.md`);
     if (!fs.existsSync(promptPath)) throw new Error(`Prompt template for ${role} not found`);
 
     let prompt = fs.readFileSync(promptPath, "utf8");
@@ -291,7 +291,7 @@ export async function handleGetAgentPrompt(args: Record<string, unknown>): Promi
     prompt = prompt.split("$WORKSPACE_ROOT").join(resolveWorkspaceRoot(args));
 
     let fbProfile = "";
-    const fbAccountsPath = path.join(globalConfigPath, "fusebase_accounts.json");
+    const fbAccountsPath = path.join(getGlobalConfigPath(), "fusebase_accounts.json");
     if (fs.existsSync(fbAccountsPath)) {
         try {
             const fbConfig = JSON.parse(fs.readFileSync(fbAccountsPath, "utf8"));
