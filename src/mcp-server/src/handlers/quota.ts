@@ -33,6 +33,9 @@ interface RoutingRecommendation {
     quota_remaining_pct: Record<string, number>;
     fallback_chain: string[];
     task_type?: string;
+    action?: "spawn_agent" | "switch_model" | "switch_back";
+    platform?: string;
+    switch_back_available?: boolean;
 }
 
 export async function handleGetRoutingRecommendation(args: Record<string, unknown>): Promise<ToolResponse> {
@@ -61,6 +64,7 @@ export async function handleGetRoutingRecommendation(args: Record<string, unknow
     const tiers = chain?.tiers ?? [];
     const taskRouting = chain?.task_routing?.routes ?? {};
     const fallbackChain = tiers.map((t: any) => t.model);
+    const platform = fallbackConfig.platform;
 
     // Load quota snapshot
     let quotaRemaining: Record<string, number> = {};
@@ -80,7 +84,99 @@ export async function handleGetRoutingRecommendation(args: Record<string, unknow
         }
     } catch { /* proceed without quota data */ }
 
-    // Determine recommendation
+    // ── Antigravity Platform Mode ─────────────────────────────────────
+    if (platform?.name === "antigravity") {
+        const preferred = platform.preferred_model ?? fallbackChain[0];
+        const secondary = platform.secondary_model ?? fallbackChain[1];
+        const exhaustedThreshold = platform.quota_exhausted_threshold ?? 5;
+        const refreshedThreshold = platform.quota_refreshed_threshold ?? 30;
+
+        // Find quota for each model family
+        const findQuota = (model: string): number | null => {
+            const family = model.toLowerCase().split(' ')[0];
+            const entry = Object.entries(quotaRemaining).find(([k]) =>
+                k.toLowerCase().includes(family)
+            );
+            return entry ? entry[1] : null;
+        };
+
+        const preferredQuota = findQuota(preferred);
+        const secondaryQuota = findQuota(secondary);
+
+        let recommended = preferred;
+        let reason: string;
+        let action: "spawn_agent" | "switch_model" | "switch_back";
+        let switchBackAvailable = false;
+
+        if (preferredQuota !== null && preferredQuota < exhaustedThreshold) {
+            // Preferred model exhausted → switch to secondary
+            recommended = secondary;
+            reason = `Antigravity: ${preferred} quota exhausted (${preferredQuota}% < ${exhaustedThreshold}% threshold). Switch global model to ${secondary}.`;
+            action = "switch_model";
+
+            // Check if switch-back is possible (shouldn't be, since we just exhausted)
+            switchBackAvailable = false;
+        } else if (secondaryQuota !== null && secondaryQuota < exhaustedThreshold
+                   && (preferredQuota === null || preferredQuota >= refreshedThreshold)) {
+            // Secondary was active and exhausted, preferred has recovered → switch back
+            recommended = preferred;
+            reason = `Antigravity: ${secondary} quota exhausted. ${preferred} quota refreshed (${preferredQuota ?? "unknown"}% ≥ ${refreshedThreshold}%). Switch back to preferred model.`;
+            action = "switch_back";
+            switchBackAvailable = true;
+        } else {
+            // Normal operation → spawn agent on current model, no switch needed
+            recommended = preferred;
+            reason = `Antigravity: model is global. Spawn a new agent (isolated context) on current model. No model switch needed.`;
+            action = "spawn_agent";
+
+            // Flag if preferred model quota is recovering after a secondary stint
+            if (preferredQuota !== null && preferredQuota >= refreshedThreshold
+                && secondaryQuota !== null && secondaryQuota < exhaustedThreshold) {
+                switchBackAvailable = true;
+            }
+        }
+
+        const result: RoutingRecommendation = {
+            recommended_model: recommended,
+            reason,
+            quota_remaining_pct: quotaRemaining,
+            fallback_chain: fallbackChain,
+            action,
+            platform: "antigravity",
+            switch_back_available: switchBackAvailable,
+            ...(taskType ? { task_type: taskType } : {})
+        };
+
+        const lines = [
+            `Routing Recommendation (Antigravity Mode)`,
+            "",
+            `Action:      ${result.action}`,
+            `Recommended: ${result.recommended_model}`,
+            `Reason:      ${result.reason}`,
+            "",
+            `⚠️  Model is GLOBAL — switching affects ALL open chats/agents.`,
+            "",
+            `Fallback chain: ${fallbackChain.join(" → ")}`,
+            "",
+            `Quota remaining:`,
+            ...Object.entries(quotaRemaining).map(([k, v]) => `  ${k}: ${v}%`),
+        ];
+
+        if (Object.keys(quotaRemaining).length === 0) {
+            lines.push("  (no quota data — run quota_check first)");
+        }
+
+        if (switchBackAvailable) {
+            lines.push("", `✅ Switch-back available: ${preferred} quota has refreshed.`);
+        }
+
+        return {
+            toolResult: JSON.stringify(result),
+            content: [{ type: "text", text: lines.join("\n") }]
+        };
+    }
+
+    // ── Generic Platform Mode (original behavior) ─────────────────────
     let recommended = fallbackChain[0] ?? "Unknown";
     let reason = "Default: top-tier model";
 

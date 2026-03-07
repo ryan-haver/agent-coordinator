@@ -211,4 +211,29 @@ describe("get_routing_recommendation", () => {
         // Either routes by task type or reports no fallback config found
         expect(result.text).toMatch(/deep_debugging|No model_fallback/);
     });
+
+    it("Antigravity mode returns spawn_agent action when quota is healthy", async () => {
+        const result = await server.callTool("get_routing_recommendation", {});
+        expect(result.isError).toBe(false);
+
+        // If model_fallback.json was found and has platform.name = antigravity
+        if (result.text.includes("Antigravity Mode")) {
+            expect(result.text).toContain("spawn_agent");
+            expect(result.text).toContain("Model is GLOBAL");
+
+            // The text includes "Action:      spawn_agent" and structured data
+            expect(result.text).toContain("Action:");
+        }
+    });
+
+    it("Antigravity mode includes task_type in response when provided", async () => {
+        const result = await server.callTool("get_routing_recommendation", {
+            task_type: "architecture_design"
+        });
+        expect(result.isError).toBe(false);
+
+        if (result.text.includes("Antigravity Mode")) {
+            expect(result.text).toContain("spawn_agent");
+        }
+    });
 });

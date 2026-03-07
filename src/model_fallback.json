@@ -1,4 +1,16 @@
 {
+  "platform": {
+    "name": "antigravity",
+    "model_scope": "global",
+    "agent_context": "isolated",
+    "description": "On Antigravity the model selector is global (affects all chats). Each spawned agent gets its own isolated context window. Spawn agents instead of switching models. Only switch on quota exhaustion.",
+    "preferred_model": "Claude Opus 4.6 (Thinking)",
+    "secondary_model": "Gemini 3.1 Pro (High)",
+    "switch_trigger": "quota_exhausted",
+    "switch_back_trigger": "quota_refreshed",
+    "quota_exhausted_threshold": 5,
+    "quota_refreshed_threshold": 30
+  },
   "model_fallback_chain": {
     "description": "Global model hierarchy for the Agent Coordination System. Model names match the Antigravity model selector.",
     "tiers": [
