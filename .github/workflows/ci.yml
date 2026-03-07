@@ -19,9 +19,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: src/mcp-server/package-lock.json
+
+      - name: Install native build dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential python3
 
       - name: Install dependencies
         run: npm ci
@@ -30,10 +33,11 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Unit tests
-        run: npm test -- --test-timeout=5000
+        run: npm test -- --reporter=verbose --test-timeout=10000
 
       - name: Integration tests (Part A — SQLite fallback)
-        run: npm run test:integration -- --test-timeout=5000
+        run: npm run test:integration -- --reporter=verbose --test-timeout=10000
+
 
   integration-part-b:
     runs-on: ubuntu-latest
