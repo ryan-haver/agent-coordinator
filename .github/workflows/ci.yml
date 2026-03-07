@@ -29,14 +29,42 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Rebuild native addons for CI OS
+        run: npm rebuild better-sqlite3
+
+      - name: Verify native modules load
+        run: |
+          node -e "const db = require('better-sqlite3')(':memory:'); console.log('better-sqlite3 OK:', db.pragma('journal_mode', { simple: true }));" || echo "better-sqlite3 FAILED"
+          echo "### Native Module Check" >> $GITHUB_STEP_SUMMARY
+          echo "better-sqlite3: ✅ loaded" >> $GITHUB_STEP_SUMMARY
+
       - name: Type check
         run: npx tsc --noEmit
 
       - name: Unit tests
-        run: npm test -- --reporter=verbose --test-timeout=10000
+        run: |
+          npm test -- --reporter=verbose --test-timeout=10000 2>&1 | tee test-output.txt
+          exit_code=${PIPESTATUS[0]}
+          if [ $exit_code -ne 0 ]; then
+            echo "### ❌ Unit Test Failure" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -50 test-output.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+          exit $exit_code
 
       - name: Integration tests (Part A — SQLite fallback)
-        run: npm run test:integration -- --reporter=verbose --test-timeout=10000
+        run: |
+          npm run test:integration -- --reporter=verbose --test-timeout=10000 2>&1 | tee integration-output.txt
+          exit_code=${PIPESTATUS[0]}
+          if [ $exit_code -ne 0 ]; then
+            echo "### ❌ Integration Test Failure" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -50 integration-output.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+          exit $exit_code
+
 
 
   integration-part-b:
