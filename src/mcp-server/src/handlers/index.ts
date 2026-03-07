@@ -31,8 +31,11 @@ import { handleBroadcastEvent, handleGetEvents, handlePostHandoffNote, handleGet
 // Swarm handlers
 import { handleGetSwarmStatus, handleCompleteSwarm, handleListActiveSwarms, handleRollupAgentProgress } from "./swarm.js";
 
-// Quota handler
-import { handleCheckQuota } from "./quota.js";
+// Quota, routing & notification handlers
+import { handleCheckQuota, handleGetRoutingRecommendation, handleConfigureNotifications, handleSendNotification } from "./quota.js";
+
+// Dashboard handler
+import { handleGetDashboardData } from "./dashboard.js";
 
 // Fusebase handlers
 import { handleLogFusebasePending, handleSyncFusebasePending, handleGetFusebaseSyncStatus } from "./fusebase.js";
@@ -91,8 +94,16 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
     list_active_swarms: handleListActiveSwarms,
     rollup_agent_progress: handleRollupAgentProgress,
 
-    // Quota
+    // Quota & routing
     check_quota: handleCheckQuota,
+    get_routing_recommendation: handleGetRoutingRecommendation,
+
+    // Notifications
+    configure_notifications: handleConfigureNotifications,
+    send_notification: handleSendNotification,
+
+    // Dashboard
+    get_dashboard_data: handleGetDashboardData,
 
     // Fusebase
     log_fusebase_pending: handleLogFusebasePending,

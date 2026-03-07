@@ -227,7 +227,7 @@ agent-coordinator/
 │
 ├── docs/
 │   ├── ARCHITECTURE.md                    ← System architecture & data flow
-│   ├── TOOL-REFERENCE.md                  ← All 41 MCP tools (auto-generated)
+│   ├── TOOL-REFERENCE.md                  ← All 45 MCP tools (auto-generated)
 │   ├── OPERATIONS.md                      ← Setup, Docker, troubleshooting
 │   ├── DEVELOPER-GUIDE.md                 ← Adding tools, testing, patterns
 │   ├── CUSTOMIZATION.md                   ← Configuration guide
@@ -244,7 +244,7 @@ agent-coordinator/
     ├── skill/ / rules/ / workflows/        ← Layers 2 & 3
     ├── templates/                          ← Manifest + agent prompt templates
     │
-    └── mcp-server/                         ← MCP Coordination Server (41 tools)
+    └── mcp-server/                         ← MCP Coordination Server (45 tools)
         ├── package.json / tsconfig.json
         └── src/
             ├── index.ts                    ← Thin router + telemetry instrumentation
@@ -257,8 +257,8 @@ agent-coordinator/
             │   ├── swarm.ts                ← Swarm lifecycle (4 tools)
             │   ├── memory.ts               ← Semantic memory (4 tools)
             │   ├── telemetry.ts            ← Telemetry queries (6 tools)
-            │   ├── scope.ts                ← Scope negotiation (3 tools)
-            │   └── quota.ts / fusebase.ts  ← Quota + Fusebase (4 tools)
+            │   ├── quota.ts                ← Quota, routing & notifications (4 tools)
+            │   ├── dashboard.ts            ← Dashboard aggregation (1 tool)
             ├── storage/                    ← StorageAdapter + 2 implementations
             │   ├── adapter.ts              ← Interface + domain types
             │   ├── file-adapter.ts          ← File-based backend
@@ -290,3 +290,4 @@ See [ROADMAP.md](docs/ROADMAP.md) for the full plan:
 | **5C** | Qdrant Semantic Memory | ✅ Complete |
 | **5D** | Documentation | ✅ Complete |
 | **6** | Temporal RAG & CI | ✅ Complete |
+| **8** | Cockpit Dashboard & Routing | ✅ Complete |

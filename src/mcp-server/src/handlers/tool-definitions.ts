@@ -1,5 +1,5 @@
 /**
- * MCP Tool Definitions — all 41 tool schemas in one place.
+ * MCP Tool Definitions — all 45 tool schemas in one place.
  * Extracted from the monolithic index.ts for maintainability.
  */
 
@@ -564,6 +564,53 @@ export const TOOL_DEFINITIONS = [
             properties: {
                 session_id: { type: "string", description: "Optional session to narrow comparison" }
             }
+        }
+    },
+    // ── Phase 8: Dashboard, Routing & Notifications ──────────────────
+    {
+        name: "get_dashboard_data",
+        description: "Unified dashboard snapshot: active swarms, telemetry summary, quota, file conflicts, and recent events in one JSON response.",
+        inputSchema: {
+            type: "object",
+            properties: {}
+        }
+    },
+    {
+        name: "get_routing_recommendation",
+        description: "Recommend optimal model based on current quota levels and task type. Uses model_fallback.json tier chain and auto-downgrades when quota is low.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                task_type: { type: "string", description: "Optional task type for routing (e.g. deep_debugging, docs_formatting, large_refactoring)" }
+            }
+        }
+    },
+    {
+        name: "configure_notifications",
+        description: "Manage webhook notification configs. Actions: list, add (requires url), remove (requires index), clear.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                action: { type: "string", description: "Action: list, add, remove, clear", enum: ["list", "add", "remove", "clear"] },
+                url: { type: "string", description: "Webhook URL (required for add)" },
+                events: { type: "array", items: { type: "string" }, description: "Event types to subscribe to (default: ['*'])" },
+                format: { type: "string", description: "Payload format: slack, discord, json", enum: ["slack", "discord", "json"] },
+                label: { type: "string", description: "Friendly name for this webhook" },
+                index: { type: "number", description: "Index to remove (for action=remove)" }
+            }
+        }
+    },
+    {
+        name: "send_notification",
+        description: "Send a manual notification to all matching webhook configs.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                event: { type: "string", description: "Event type (default: manual)" },
+                message: { type: "string", description: "Notification message text" },
+                data: { type: "object", description: "Optional extra data payload" }
+            },
+            required: ["message"]
         }
     }
 ];
