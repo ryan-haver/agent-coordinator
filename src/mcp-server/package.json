@@ -7,9 +7,9 @@
   "scripts": {
     "build": "tsc",
     "start": "node build/index.js",
-    "test": "vitest run --reporter=default --exclude tests/integration/**",
-    "test:integration": "vitest run tests/integration/",
-    "test:all": "vitest run"
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:all": "vitest run --config vitest.integration.config.ts"
   },
   "keywords": [],
   "author": "",
