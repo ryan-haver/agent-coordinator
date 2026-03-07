@@ -29,47 +29,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Rebuild native addons for CI OS
+      - name: Rebuild native addons
         run: npm rebuild better-sqlite3
-
-      - name: Verify native modules load
-        run: |
-          node -e "const db = require('better-sqlite3')(':memory:'); console.log('better-sqlite3 OK:', db.pragma('journal_mode', { simple: true }));" || echo "better-sqlite3 FAILED"
-          echo "### Native Module Check" >> $GITHUB_STEP_SUMMARY
-          echo "better-sqlite3: ✅ loaded" >> $GITHUB_STEP_SUMMARY
 
       - name: Type check
         run: npx tsc --noEmit
 
       - name: Unit tests
-        run: |
-          npm test -- --reporter=verbose --testTimeout=10000 2>&1 | tee test-output.txt || true
-          echo "EXIT_CODE=${PIPESTATUS[0]}" >> test-output.txt
+        run: npm test
 
       - name: Integration tests (Part A — SQLite fallback)
-        run: |
-          npm run test:integration -- --reporter=verbose --testTimeout=10000 2>&1 | tee integration-output.txt || true
-          echo "EXIT_CODE=${PIPESTATUS[0]}" >> integration-output.txt
+        run: npm run test:integration
 
-      - name: Upload test output
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-output
-          path: |
-            src/mcp-server/test-output.txt
-            src/mcp-server/integration-output.txt
-          retention-days: 7
-
-      - name: Check test results
-        run: |
-          unit_exit=$(grep -oP 'EXIT_CODE=\K\d+' test-output.txt || echo "1")
-          integration_exit=$(grep -oP 'EXIT_CODE=\K\d+' integration-output.txt || echo "1")
-          if [ "$unit_exit" != "0" ] || [ "$integration_exit" != "0" ]; then
-            echo "Tests failed. Unit: $unit_exit, Integration: $integration_exit"
-            cat test-output.txt
-            exit 1
-          fi
 
   integration-part-b:
     runs-on: ubuntu-latest
