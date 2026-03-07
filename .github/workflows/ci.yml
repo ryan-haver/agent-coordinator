@@ -66,11 +66,6 @@ jobs:
         image: qdrant/qdrant:latest
         ports:
           - 6333:6333
-        options: >-
-          --health-cmd "wget -qO- http://localhost:6333/healthz || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     defaults:
       run:
@@ -97,6 +92,14 @@ jobs:
 
       - name: Rebuild native addons
         run: npm rebuild better-sqlite3
+
+      - name: Wait for Qdrant
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:6333/healthz && break
+            echo "Waiting for Qdrant... ($i/30)"
+            sleep 2
+          done
 
       - name: Integration tests (Part B — live backends)
         run: npm run test:integration
