@@ -43,29 +43,33 @@ jobs:
 
       - name: Unit tests
         run: |
-          npm test -- --reporter=verbose --test-timeout=10000 2>&1 | tee test-output.txt
-          exit_code=${PIPESTATUS[0]}
-          if [ $exit_code -ne 0 ]; then
-            echo "### ❌ Unit Test Failure" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -50 test-output.txt >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          fi
-          exit $exit_code
+          npm test -- --reporter=verbose --testTimeout=10000 2>&1 | tee test-output.txt || true
+          echo "EXIT_CODE=${PIPESTATUS[0]}" >> test-output.txt
 
       - name: Integration tests (Part A — SQLite fallback)
         run: |
-          npm run test:integration -- --reporter=verbose --test-timeout=10000 2>&1 | tee integration-output.txt
-          exit_code=${PIPESTATUS[0]}
-          if [ $exit_code -ne 0 ]; then
-            echo "### ❌ Integration Test Failure" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -50 integration-output.txt >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
+          npm run test:integration -- --reporter=verbose --testTimeout=10000 2>&1 | tee integration-output.txt || true
+          echo "EXIT_CODE=${PIPESTATUS[0]}" >> integration-output.txt
+
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: |
+            src/mcp-server/test-output.txt
+            src/mcp-server/integration-output.txt
+          retention-days: 7
+
+      - name: Check test results
+        run: |
+          unit_exit=$(grep -oP 'EXIT_CODE=\K\d+' test-output.txt || echo "1")
+          integration_exit=$(grep -oP 'EXIT_CODE=\K\d+' integration-output.txt || echo "1")
+          if [ "$unit_exit" != "0" ] || [ "$integration_exit" != "0" ]; then
+            echo "Tests failed. Unit: $unit_exit, Integration: $integration_exit"
+            cat test-output.txt
+            exit 1
           fi
-          exit $exit_code
-
-
 
   integration-part-b:
     runs-on: ubuntu-latest
