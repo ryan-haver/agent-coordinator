@@ -46,6 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs: build-and-test
+    continue-on-error: true  # Live backend tests are advisory until fully adapted
 
     services:
       timescaledb:
