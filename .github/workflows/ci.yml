@@ -67,7 +67,7 @@ jobs:
         ports:
           - 6333:6333
         options: >-
-          --health-cmd "curl -f http://localhost:6333/healthz || exit 1"
+          --health-cmd "wget -qO- http://localhost:6333/healthz || exit 1"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -85,12 +85,18 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: src/mcp-server/package-lock.json
+
+      - name: Install native build dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential python3
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Rebuild native addons
+        run: npm rebuild better-sqlite3
+
       - name: Integration tests (Part B — live backends)
-        run: npm run test:integration -- --test-timeout=15000
+        run: npm run test:integration
