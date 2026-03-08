@@ -7,13 +7,11 @@
 import path from "path";
 import os from "os";
 import fs from "fs";
-import { type ToolResponse } from "./context.js";
+import { type ToolResponse, getGlobalConfigPath } from "./context.js";
 import { loadConfigs, saveConfigs, emitNotification, type WebhookConfig } from "../notifications/dispatcher.js";
 
-const CONFIG_DIR = path.join(os.homedir(), '.antigravity-configs');
-
 export async function handleCheckQuota(_args: Record<string, unknown>): Promise<ToolResponse> {
-    const quotaPath = path.join(CONFIG_DIR, 'quota_snapshot.json');
+    const quotaPath = path.join(getGlobalConfigPath(), 'quota_snapshot.json');
     try {
         if (fs.existsSync(quotaPath)) {
             const quota = JSON.parse(fs.readFileSync(quotaPath, 'utf8'));
@@ -40,14 +38,25 @@ interface RoutingRecommendation {
 
 export async function handleGetRoutingRecommendation(args: Record<string, unknown>): Promise<ToolResponse> {
     const taskType = String(args.task_type ?? "");
-    const quotaPath = path.join(CONFIG_DIR, 'quota_snapshot.json');
+    const configDir = getGlobalConfigPath();
+    const quotaPath = path.join(configDir, 'quota_snapshot.json');
     const fallbackPath = path.join(process.cwd(), '..', '..', 'model_fallback.json');
-    // Also try a relative path from the MCP server
     const fallbackPath2 = path.resolve(__dirname, '..', '..', '..', '..', 'model_fallback.json');
+    // Global config dir — canonical location documented in SKILL.md
+    const fallbackPath3 = path.join(configDir, 'model_fallback.json');
+
+    // Build search path list: env override first, then relative paths, then global config
+    const envConfigDir = process.env.AGENT_COORDINATOR_CONFIG;
+    const searchPaths = [
+        envConfigDir ? path.join(envConfigDir, 'model_fallback.json') : null,
+        fallbackPath,
+        fallbackPath2,
+        fallbackPath3,
+    ].filter(Boolean) as string[];
 
     // Load model fallback chain
     let fallbackConfig: any;
-    for (const fp of [fallbackPath, fallbackPath2]) {
+    for (const fp of searchPaths) {
         try {
             if (fs.existsSync(fp)) {
                 fallbackConfig = JSON.parse(fs.readFileSync(fp, 'utf8'));
@@ -68,6 +77,7 @@ export async function handleGetRoutingRecommendation(args: Record<string, unknow
 
     // Load quota snapshot
     let quotaRemaining: Record<string, number> = {};
+    let staleWarning = "";
     try {
         if (fs.existsSync(quotaPath)) {
             const quota = JSON.parse(fs.readFileSync(quotaPath, 'utf8'));
@@ -81,8 +91,15 @@ export async function handleGetRoutingRecommendation(args: Record<string, unknow
                 // Flat quota format: { "claude": 85, "gemini": 45 }
                 quotaRemaining = { ...quota };
             }
+            // Check staleness
+            const ageMs = Date.now() - fs.statSync(quotaPath).mtimeMs;
+            if (ageMs > 3600_000) {
+                const ageMin = Math.round(ageMs / 60_000);
+                staleWarning = `\n⚠️  Quota snapshot is ${ageMin} min old. Run quota_check to refresh.`;
+            }
         }
     } catch { /* proceed without quota data */ }
+
 
     // ── Antigravity Platform Mode ─────────────────────────────────────
     if (platform?.name === "antigravity") {
@@ -172,7 +189,7 @@ export async function handleGetRoutingRecommendation(args: Record<string, unknow
 
         return {
             toolResult: JSON.stringify(result),
-            content: [{ type: "text", text: lines.join("\n") }]
+            content: [{ type: "text", text: lines.join("\n") + staleWarning }]
         };
     }
 
@@ -230,7 +247,7 @@ export async function handleGetRoutingRecommendation(args: Record<string, unknow
 
     return {
         toolResult: JSON.stringify(result),
-        content: [{ type: "text", text: lines.join("\n") }]
+        content: [{ type: "text", text: lines.join("\n") + staleWarning }]
     };
 }
 

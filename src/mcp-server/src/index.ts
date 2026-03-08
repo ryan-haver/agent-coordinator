@@ -23,6 +23,7 @@ import fs from "fs";
 import { TOOL_DEFINITIONS } from "./handlers/tool-definitions.js";
 import { TOOL_HANDLERS } from "./handlers/index.js";
 import { resolveWorkspaceRoot, getGlobalConfigPath } from "./handlers/context.js";
+import { logConfigStatus } from "./config-check.js";
 
 // Read version from package.json at startup
 const PKG = JSON.parse(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([a-zA-Z]:)/, '$1')), '..', '..', 'package.json'), 'utf8'));
@@ -179,6 +180,9 @@ async function main() {
     // Init semantic memory (soft dependency — no-ops if QDRANT_URL not set)
     await initMemory();
     console.error(`[agent-coordinator] Semantic memory: ${process.env.QDRANT_URL ? "enabled" : "disabled (QDRANT_URL not set)"}`);
+
+    // Validate config files
+    logConfigStatus();
 
     // Graceful shutdown
     process.on("SIGINT", () => { telemetry.shutdown().finally(() => process.exit(0)); });

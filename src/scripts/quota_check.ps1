@@ -87,6 +87,10 @@ foreach ($port in $ports) {
     }
 }
 
+# Ensure config directory exists
+$configDir = Join-Path -Path $HOME -ChildPath ".antigravity-configs"
+if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
+
 if (-not $quotaData) {
     Write-Warning "⚠️ All ports failed. Could not retrieve quota data."
     Write-Warning "Writing fallback quota_snapshot.json — swarm will proceed without quota routing."
@@ -96,14 +100,15 @@ if (-not $quotaData) {
         models    = @()
         timestamp = (Get-Date -Format o)
     }
-    $outFile = Join-Path -Path $PWD -ChildPath "quota_snapshot.json"
+    $outFile = Join-Path -Path $configDir -ChildPath "quota_snapshot.json"
     $fallback | ConvertTo-Json -Depth 5 | Out-File -FilePath $outFile -Encoding utf8
     Write-Host "⚠️ Fallback quota snapshot saved to $outFile"
     exit 0
 }
 
 # Step 6: Write the raw quota snapshot to disk
-$outFile = Join-Path -Path $PWD -ChildPath "quota_snapshot.json"
+$outFile = Join-Path -Path $configDir -ChildPath "quota_snapshot.json"
 $quotaData | ConvertTo-Json -Depth 10 | Out-File -FilePath $outFile -Encoding utf8
 
 Write-Host "✅ Quota snapshot saved to $outFile"
+

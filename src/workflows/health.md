@@ -140,7 +140,25 @@ Compare the configured model names against the Antigravity model selector. If mo
 - 🟡 **YELLOW**: Model versions appear outdated — recommend updating `model_fallback.json`
 - 🔴 **RED**: A configured tier model no longer exists in the selector
 
-### 7. MCP Server Registration
+- 🔴 **RED**: A configured tier model no longer exists in the selector
+
+### 7. Auto Mode Settings
+// turbo
+Check if `auto_mode_settings` have been verified for the current Antigravity instance.
+
+**Windows (PowerShell):**
+```powershell
+$config = Get-Content "$env:USERPROFILE\.antigravity-configs\model_fallback.json" -Raw | ConvertFrom-Json
+if ($config.auto_mode_settings.verified -eq $true) { echo "Auto Mode: VERIFIED" } else { echo "Auto Mode: UNVERIFIED (Swarm-auto scripts may fail)" }
+```
+**macOS/Linux (Bash):**
+```bash
+python3 -c "import json; d=json.load(open('$HOME/.antigravity-configs/model_fallback.json')); print('Auto Mode: VERIFIED' if d.get('auto_mode_settings', {}).get('verified') else 'Auto Mode: UNVERIFIED (Swarm-auto scripts may fail)')"
+```
+- ✅ **GREEN**: Verified
+- 🟡 **YELLOW**: Unverified
+
+### 8. MCP Server Registration
 // turbo
 Verify the agent-coordinator MCP server is properly registered:
 **Windows (PowerShell):**
@@ -169,7 +187,9 @@ else echo "MCP config not found"; fi
 - 🟡 **YELLOW**: Registered but binary missing (run `npm run build` in the MCP server directory)
 - 🔴 **RED**: Not registered at all
 
-### 8. Fusebase MCP (Optional)
+- 🔴 **RED**: Not registered at all
+
+### 9. Fusebase MCP (Optional)
 // turbo
 Check if Fusebase MCP is available (optional — local fallback exists):
 **Windows (PowerShell):**
@@ -185,7 +205,7 @@ if [ -f "$MCP_CONFIG" ]; then node -e "const c=JSON.parse(require('fs').readFile
 - ✅ **GREEN**: Fusebase MCP configured
 - ℹ️ **INFO**: Not configured — agents will use local `swarm-docs/` fallback
 
-### 9. Output Report
+### 10. Output Report
 
 Present the results in this format:
 
@@ -206,6 +226,7 @@ Present the results in this format:
 | Model Freshness        | ✅/🟡/🔴 | Tier models vs selector [status]     |
 | MCP Server             | ✅/🟡/🔴 | Registration + binary [status]       |
 | Fusebase MCP           | ✅/ℹ️    | Available / fallback mode            |
+| Auto Mode Settings     | ✅/🟡    | Verified [status]                    |
 | Gitignore Protection   | ✅/🟡    | handoff artifacts [status]           |
 | Active Manifest        | ℹ️      | [clean / active from previous]        |
 ```
