@@ -1545,22 +1545,54 @@ Full analysis saved at project root.
 
 ---
 
+## Phase 9: Production Readiness & UX Stabilization
+
+Bring the Agent Coordinator and Cockpit extension to full production readiness. Focus shifts from backend primitives to user experience, reliability (dynamic routing), and holistic end-to-end testing.
+
+### Phase 9A: The Visual Swarm Cockpit
+*Deliver a rich UI inside the VS Code Cockpit extension to make swarm orchestration observable.*
+
+- **Goal**: The extension webview should natively consume and render `swarm_status.json` instead of relying merely on text logs.
+- **Tasks**:
+  - Implement a polling/subscription mechanism in the Cockpit webview to track session state.
+  - Visualize active agents, their assigned roles, current status, and phase.
+  - Expose telemetry metrics (token usage, duration) directly in the UI.
+  - Incorporate Quick Actions for pausing/stopping specific agents or the entire swarm.
+
+### Phase 9B: Intelligent Quota Router
+*Formalize dynamic model shifting mid-swarm to guarantee reliability.*
+
+- **Goal**: Elevate the `quota-check.ps1` script into an active, continuous listener integrated into the Coordinator's routing layer.
+- **Tasks**:
+  - Create a background daemon/task within the MCP Server that periodically checks quota health.
+  - Enhance `ProviderRegistry.selectProvider()` to listen to real-time quota events.
+  - Implement zero-downtime failover: If Gemini rate limits are hit during a 20-agent swarm, automatically route subsequent spawns to ClaudeCodeProvider or HeadlessProvider based on `fallbackChain`.
+  - Add explicit logging/telemetry for "Provider Shifting Events" in TimescaleDB.
+
+### Phase 9C: Standalone / Pay-As-You-Go UX
+*Package the CLI-based fallback providers into a smooth external experience.*
+
+- **Goal**: Enable teams and users without VS Code extensions to leverage the coordinator via standalone mode effortlessly.
+- **Tasks**:
+  - Implement the intended CLI vendor abstraction layer.
+  - Ensure the `spawn_agent` via `claude-code-provider` and `codex-provider` properly maps CLI terminal stdout/stderr back to the shared state protocol without orphaned processes.
+  - Provide a standalone standalone web UI or terminal dashboard for Non-Antigravity users.
+
+### Phase 9D: E2E Dogfooding Assessment
+*Run a massive, highly-complex multi-agent swarm purely using the new UX and automated approvals to validate the entire system end-to-end.*
+
+- **Goal**: Final stabilization and stress-testing.
+- **Tasks**:
+  - Formulate a complex synthetic objective (e.g., refactor a legacy project while writing test coverage and documentation).
+  - Execute using `/swarm` syntax to fully test template generation and auto-approver edge cases.
+  - Fix any emergent issues discovered dynamically during the simulation.
+  - Draft the final release notes for Agent Coordinator v1.0.
+
+---
+
 ## Future Phases
 
-### Cockpit Extension Enhancements
-
-- Cockpit watches `swarm_status.json` and surfaces notifications
-- Quota-aware auto-routing without user input
-- Visual swarm dashboard in cockpit webview
-
-### CLI Fallback Mode
-
-- For pay-as-you-go users: spawn agents via `gemini`/`claude`/`codex`/`qwen` CLI
-- Vendor abstraction layer (inspired by oh-my-ag `cli-config.yaml`)
-- Same shared state protocol, different spawn mechanism
-
 ### Custom Agent Marketplace
-
 - Community-contributed agent roles
 - Domain-specific presets (ML, DevOps, frontend, data engineering)
 - Agent prompt versioning and testing

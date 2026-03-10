@@ -28,6 +28,12 @@ export { AntigravityProvider, getAntigravityProvider } from "./antigravity-provi
 export { ClaudeCodeProvider, getClaudeCodeProvider, resetClaudeCodeProvider } from "./claude-code-provider.js";
 export type { ClaudeCodeConfig } from "./claude-code-provider.js";
 
+export { CodexProvider } from "./codex-provider.js";
+export type { CodexConfig } from "./codex-provider.js";
+
+export { HeadlessProvider } from "./headless-provider.js";
+export type { HeadlessConfig } from "./headless-provider.js";
+
 // Model catalog (dynamic model list from state.vscdb)
 export { ModelCatalog, getModelCatalog, resetModelCatalog, readModelCredits } from "./model-catalog.js";
 export type { ModelEntry, CatalogSnapshot, QuotaBucket } from "./model-catalog.js";

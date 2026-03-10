@@ -313,7 +313,7 @@ describe("ErrorDetector", () => {
 
     describe("watchAgent / unwatchAgent", () => {
         it("starts watching an agent", () => {
-            detector.watchAgent("agent-1", "conv-1");
+            detector.watchAgent("agent-1", "conv-1", "alpha");
             const watches = detector.getWatches();
             expect(watches).toHaveLength(1);
             expect(watches[0].agentId).toBe("agent-1");
@@ -321,7 +321,7 @@ describe("ErrorDetector", () => {
         });
 
         it("stops watching when unwatched", () => {
-            detector.watchAgent("agent-1", "conv-1");
+            detector.watchAgent("agent-1", "conv-1", "alpha");
             detector.unwatchAgent("agent-1");
             expect(detector.getWatches()).toHaveLength(0);
         });
@@ -329,7 +329,7 @@ describe("ErrorDetector", () => {
 
     describe("shouldRetry", () => {
         it("recommends retry when attempts remain", () => {
-            detector.watchAgent("agent-1", "conv-1", 1);
+            detector.watchAgent("agent-1", "conv-1", "alpha", 1);
             const decision = detector.shouldRetry("agent-1");
             expect(decision.retry).toBe(true);
             expect(decision.attempt).toBe(2);
@@ -343,16 +343,16 @@ describe("ErrorDetector", () => {
         });
 
         it("no retry when max retries exhausted", () => {
-            detector.watchAgent("agent-1", "conv-1", 3); // already at max
+            detector.watchAgent("agent-1", "conv-1", "alpha", 3); // already at max
             const decision = detector.shouldRetry("agent-1");
             expect(decision.retry).toBe(false);
             expect(decision.reason).toContain("Max retries");
         });
 
         it("uses exponential backoff for delays", () => {
-            detector.watchAgent("agent-1", "conv-1", 1);
+            detector.watchAgent("agent-1", "conv-1", "alpha", 1);
             const d1 = detector.shouldRetry("agent-1");
-            detector.watchAgent("agent-2", "conv-2", 2);
+            detector.watchAgent("agent-2", "conv-2", "alpha", 2);
             const d2 = detector.shouldRetry("agent-2");
             expect(d2.delay).toBeGreaterThan(d1.delay);
         });
@@ -380,7 +380,7 @@ describe("ErrorDetector", () => {
 
     describe("getWatch", () => {
         it("returns specific watch", () => {
-            detector.watchAgent("agent-1", "conv-1");
+            detector.watchAgent("agent-1", "conv-1", "alpha");
             const w = detector.getWatch("agent-1");
             expect(w).toBeDefined();
             expect(w!.conversationId).toBe("conv-1");
@@ -393,8 +393,8 @@ describe("ErrorDetector", () => {
 
     describe("dispose", () => {
         it("clears all watches and stops polling", () => {
-            detector.watchAgent("a", "c1");
-            detector.watchAgent("b", "c2");
+            detector.watchAgent("a", "c1", "alpha");
+            detector.watchAgent("b", "c2", "alpha");
             detector.dispose();
             expect(detector.getWatches()).toHaveLength(0);
         });

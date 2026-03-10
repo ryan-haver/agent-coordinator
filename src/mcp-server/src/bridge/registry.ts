@@ -12,6 +12,8 @@ import type {
     SpawnOptions,
     SpawnResult,
 } from "./provider.js";
+import { getQuotaMonitor } from "./quota-monitor.js";
+import { getModelCatalog } from "./model-catalog.js";
 
 /** Combined view of a provider + its config */
 export interface RegisteredProvider {
@@ -29,6 +31,8 @@ export interface ProviderRequirements {
     model?: string;
     /** Required capabilities */
     capabilities?: string[];
+    /** Providers to exclude from selection (e.g. ones that just failed) */
+    excludeProviders?: string[];
 }
 
 /** Result of provider selection */
@@ -141,12 +145,39 @@ export class ProviderRegistry {
                     if (!hasAll) return false;
                 }
 
+                // Exclusion match
+                if (requirements.excludeProviders && requirements.excludeProviders.includes(rp.provider.name)) {
+                    return false;
+                }
+
                 return true;
             })
             .sort((a, b) => a.config.priority - b.config.priority);
 
         if (candidates.length === 0) return null;
 
+        // Quota-aware fallback strategy
+        const monitor = getQuotaMonitor();
+        const catalog = getModelCatalog();
+        const buckets = catalog.getQuotaBuckets(monitor.getQuotaSnapshot().buckets);
+
+        // Try to find the highest-priority candidate that isn't in an exhausted bucket
+        for (const candidate of candidates) {
+            // Determine candidate's bucket based on its first model
+            const candidateModel = requirements.model || candidate.provider.models[0];
+            const candidateBucket = buckets.find(b => b.models.includes(candidateModel));
+            
+            if (candidateBucket) {
+                const pivotRec = monitor.getPivotRecommendation(candidateBucket.name);
+                if (pivotRec.shouldPivot && pivotRec.exhaustedBucket === candidateBucket.name) {
+                    // This provider's bucket is exhausted, skip it if possible
+                    continue;
+                }
+            }
+            return { provider: candidate.provider, reason: `Highest-priority healthy provider (priority ${candidate.config.priority})` };
+        }
+
+        // If all candidates are exhausted, return the highest-priority one anyway (might succeed)
         const best = candidates[0];
         const reason = requirements.model
             ? `Best available provider for model "${requirements.model}" (priority ${best.config.priority})`
@@ -206,6 +237,26 @@ export class ProviderRegistry {
     getDefault(): AgentProvider | null {
         const selection = this.selectProvider();
         return selection?.provider ?? null;
+    }
+
+    /** Stop all active agents across all providers */
+    async stopAll(): Promise<void> {
+        const stops: Promise<void>[] = [];
+        for (const rp of this.providers.values()) {
+            stops.push((async () => {
+                try {
+                    const sessions = await rp.provider.listSessions();
+                    for (const s of sessions) {
+                        if (s.state === 'running') {
+                            await rp.provider.stop(s.conversationId);
+                        }
+                    }
+                } catch (e) {
+                    // Ignore errors during mass stop
+                }
+            })());
+        }
+        await Promise.all(stops);
     }
 
     /** Reset all active counts (useful for testing) */

@@ -13,6 +13,7 @@
  */
 import fs from "fs";
 import path from "path";
+import { EventEmitter } from "events";
 import { getModelCatalog, readModelCredits, type QuotaBucket } from "./model-catalog.js";
 import { getGlobalConfigPath } from "../handlers/context.js";
 
@@ -57,9 +58,10 @@ const REFRESHED_THRESHOLD_PCT = 30;
 
 // ── QuotaMonitor Class ─────────────────────────────────────────────
 
-export class QuotaMonitor {
+export class QuotaMonitor extends EventEmitter {
     private lastSnapshot: QuotaSnapshot | null = null;
     private spawnCounts: Map<string, number> = new Map();
+    private pollInterval: NodeJS.Timeout | null = null;
 
     /**
      * Get the current quota snapshot from all available sources.
@@ -328,6 +330,48 @@ export class QuotaMonitor {
     reset(): void {
         this.lastSnapshot = null;
         this.spawnCounts.clear();
+        this.stopPolling();
+    }
+
+    // ── Daemon Polling ────────────────────────────────────────────────
+
+    /**
+     * Start continuous background polling of quota health.
+     * Emits 'quota_exhausted', 'quota_warning', or 'quota_healthy'.
+     */
+    startPolling(intervalMs: number = 30000): void {
+        if (this.pollInterval) return;
+
+        console.log(`[Quota Router] Starting continuous quota health listener (interval: ${intervalMs}ms)`);
+        
+        this.pollInterval = setInterval(() => {
+            const report = this.getStatusReport();
+            
+            if (report.recommendation.shouldPivot) {
+                // Determine if this is a newly exhausted bucket
+                this.emit("quota_exhausted", report.recommendation);
+                console.warn(`[Quota Router] Provider Shifting Event: ${report.recommendation.reason}`);
+            } else if (report.recommendation.reason.includes("approaching exhaustion")) {
+                this.emit("quota_warning", report.recommendation);
+            } else {
+                this.emit("quota_healthy", report);
+            }
+        }, intervalMs);
+        
+        // Unref so it doesn't block Node exit
+        if (this.pollInterval.unref) {
+            this.pollInterval.unref();
+        }
+    }
+
+    /**
+     * Stop background polling.
+     */
+    stopPolling(): void {
+        if (this.pollInterval) {
+            clearInterval(this.pollInterval);
+            this.pollInterval = null;
+        }
     }
 }
 

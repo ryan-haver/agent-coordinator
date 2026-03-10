@@ -11,6 +11,7 @@ import type { ToolHandler } from "./context.js";
 import { getStorage } from "../storage/singleton.js";
 import { getTelemetry } from "../telemetry/client.js";
 import { listActiveSwarms, type SwarmRegistryEntry } from "../utils/swarm-registry.js";
+import { getProviderRegistry } from "../bridge/registry.js";
 
 const QUOTA_PATH = path.join(os.homedir(), '.antigravity-configs', 'quota_snapshot.json');
 const EVENTS_DIR = path.join(os.homedir(), '.antigravity-configs', 'swarm_events');
@@ -27,6 +28,7 @@ interface DashboardData {
     quota: object | null;
     file_conflicts: Array<{ file: string; claimants: string[] }>;
     recent_events: object[];
+    providers: Array<{ name: string; enabled: boolean; online: boolean }>;
     timestamp: string;
 }
 
@@ -37,6 +39,7 @@ export const handleGetDashboardData: ToolHandler = async (_args) => {
         quota: null,
         file_conflicts: [],
         recent_events: [],
+        providers: [],
         timestamp: new Date().toISOString()
     };
 
@@ -107,6 +110,18 @@ export const handleGetDashboardData: ToolHandler = async (_args) => {
         }
     } catch { /* non-fatal */ }
 
+    // 6. Provider status
+    try {
+        const registry = getProviderRegistry();
+        const providerList = registry.listProviders();
+        const healthMap = await registry.pingAll();
+        data.providers = providerList.map(p => ({
+            name: p.name,
+            enabled: p.enabled,
+            online: healthMap.get(p.name)?.online ?? false,
+        }));
+    } catch { /* non-fatal */ }
+
     const summary = [
         `Dashboard Snapshot — ${data.timestamp}`,
         "",
@@ -118,6 +133,7 @@ export const handleGetDashboardData: ToolHandler = async (_args) => {
         `File conflicts:   ${data.file_conflicts.length}`,
         `Quota loaded:     ${data.quota ? "yes" : "no"}`,
         `Recent events:    ${data.recent_events.length}`,
+        `Providers:        ${data.providers.length} (${data.providers.filter(p => p.online).length} online)`,
     ];
 
     return {

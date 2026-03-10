@@ -15,6 +15,9 @@ import os from "os";
 import { getProviderRegistry } from "./registry.js";
 import { getAntigravityProvider } from "./antigravity-provider.js";
 import { ClaudeCodeProvider } from "./claude-code-provider.js";
+import { CodexProvider } from "./codex-provider.js";
+import { HeadlessProvider } from "./headless-provider.js";
+import { getQuotaMonitor } from "./quota-monitor.js";
 import type { AgentProvider } from "./provider.js";
 
 /** Shape of a single provider entry in providers.json */
@@ -91,9 +94,21 @@ export function createProvider(
                 allowedTools: entry.settings?.allowedTools as string | undefined,
             });
 
-        // Phase 8D: Codex
-        // case "codex":
-        //     return new CodexProvider(entry);
+        case "codex":
+            return new CodexProvider({
+                command: entry.command
+            });
+
+        case "headless":
+            if (!entry.endpoint || !entry.settings?.defaultModel) {
+                console.error("Headless provider requires endpoint and settings.defaultModel");
+                return null;
+            }
+            return new HeadlessProvider({
+                endpoint: entry.endpoint,
+                apiKey: entry.settings?.apiKey as string | undefined,
+                defaultModel: entry.settings.defaultModel as string
+            });
 
         default:
             return null;
@@ -142,6 +157,9 @@ export function loadProviders(): { loaded: string[]; skipped: string[] } {
         registry.register(ag, { enabled: true, priority: 99, maxConcurrent: 3 });
         loaded.push("antigravity");
     }
+
+    // Start continuous quota monitoring
+    getQuotaMonitor().startPolling(30000); // 30 seconds
 
     return { loaded, skipped };
 }

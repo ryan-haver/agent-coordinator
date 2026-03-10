@@ -10,6 +10,7 @@ import { getRateLimiter } from "./rate-limiter.js";
 export interface AgentWatch {
     agentId: string;
     conversationId: string;
+    providerName: string;
     startedAt: number;
     lastCheckedAt: number;
     attempt: number;
@@ -64,11 +65,12 @@ export class ErrorDetector {
     /**
      * Start watching an agent's conversation for failures.
      */
-    watchAgent(agentId: string, conversationId: string, attempt = 1): void {
+    watchAgent(agentId: string, conversationId: string, providerName: string, attempt = 1): void {
         const now = Date.now();
         this.watches.set(agentId, {
             agentId,
             conversationId,
+            providerName,
             startedAt: now,
             lastCheckedAt: now,
             attempt,
@@ -145,49 +147,62 @@ export class ErrorDetector {
     /**
      * Poll all watched agents for status changes.
      */
-    private async pollAll(): Promise<void> {
+    async pollAll(): Promise<void> {
         const client = getBridgeClient();
+        const { getProviderRegistry } = await import("./registry.js");
+        const registry = getProviderRegistry();
 
         for (const [agentId, watch] of this.watches) {
             if (watch.status !== "running") continue;
 
             try {
-                const conv = await client.getConversation(watch.conversationId);
-                watch.lastCheckedAt = Date.now();
+                let statusStr = "";
+                let lastMessage = "";
 
-                if (!conv) {
-                    // Conversation disappeared — likely agent crashed
-                    watch.status = "failed";
-                    watch.lastError = "Conversation no longer exists";
-                    getRateLimiter().recordCompletion();
-                    getRateLimiter().recordError();
-                    this.onAgentFailed?.(watch);
-                    continue;
+                if (watch.providerName === "antigravity (fallback)") {
+                    const conv = await client.getConversation(watch.conversationId);
+                    if (!conv) {
+                        this.failAgent(watch, "Conversation no longer exists");
+                        continue;
+                    }
+                    statusStr = String(conv.status ?? conv.state ?? "").toLowerCase();
+                    lastMessage = String(conv.lastMessage ?? conv.last_message ?? "");
+                } else {
+                    const provider = registry.getProvider(watch.providerName);
+                    if (!provider) {
+                        this.failAgent(watch, `Provider ${watch.providerName} not found`);
+                        continue;
+                    }
+                    const status = await provider.getAgentStatus(watch.conversationId);
+                    statusStr = status.state.toLowerCase();
+                    lastMessage = status.lastMessage ?? "";
                 }
 
-                // Check for error indicators in conversation status
-                const status = String(conv.status ?? conv.state ?? "").toLowerCase();
-                const lastMessage = String(conv.lastMessage ?? conv.last_message ?? "");
+                watch.lastCheckedAt = Date.now();
 
-                if (status === "completed" || status === "done") {
+                if (statusStr === "completed" || statusStr === "done") {
                     watch.status = "completed";
                     getRateLimiter().recordCompletion();
                     this.onAgentCompleted?.(watch);
                     continue;
                 }
 
-                if (status === "error" || status === "failed" || ErrorDetector.containsError(lastMessage)) {
-                    watch.status = "failed";
-                    watch.lastError = lastMessage || status;
-                    getRateLimiter().recordCompletion();
-                    getRateLimiter().recordError();
-                    this.onAgentFailed?.(watch);
+                if (statusStr === "error" || statusStr === "failed" || ErrorDetector.containsError(lastMessage)) {
+                    this.failAgent(watch, lastMessage || statusStr);
                     continue;
                 }
             } catch {
                 // Network error — bridge may be down, don't mark agent as failed yet
             }
         }
+    }
+
+    private failAgent(watch: AgentWatch, errorMsg: string) {
+        watch.status = "failed";
+        watch.lastError = errorMsg;
+        getRateLimiter().recordCompletion();
+        getRateLimiter().recordError();
+        this.onAgentFailed?.(watch);
     }
 
     /**
@@ -210,4 +225,11 @@ export function getErrorDetector(): ErrorDetector {
         _errorDetector = new ErrorDetector();
     }
     return _errorDetector;
+}
+
+export function setErrorDetector(detector: ErrorDetector | undefined): void {
+    if (_errorDetector) {
+        _errorDetector.dispose();
+    }
+    _errorDetector = detector;
 }

@@ -28,7 +28,7 @@ export async function handleJournalWrite(args: Record<string, unknown>): Promise
 
     const wsRoot = resolveWorkspaceRoot(args);
     const storage = getStorage();
-    const db = storage.getDb(wsRoot);
+    const db = (storage as any).getDb(wsRoot);
 
     let sessionId = "";
     try { sessionId = storage.extractSessionId(storage.readManifest(wsRoot)); } catch { /* non-fatal */ }
@@ -55,7 +55,7 @@ export async function handleJournalWrite(args: Record<string, unknown>): Promise
 export async function handleJournalRead(args: Record<string, unknown>): Promise<ToolResponse> {
     const wsRoot = resolveWorkspaceRoot(args);
     const storage = getStorage();
-    const db = storage.getDb(wsRoot);
+    const db = (storage as any).getDb(wsRoot);
 
     const scope = (args?.scope as string) || "personal";
     const agentId = args?.agent_id as string;
@@ -124,7 +124,7 @@ export async function handleJournalPromote(args: Record<string, unknown>): Promi
 
     const wsRoot = resolveWorkspaceRoot(args);
     const storage = getStorage();
-    const db = storage.getDb(wsRoot);
+    const db = (storage as any).getDb(wsRoot);
 
     // Fetch the entry
     const entry = db.prepare(
@@ -199,7 +199,7 @@ export async function handleJournalSearch(args: Record<string, unknown>): Promis
     // Fallback: text search in SQLite promoted entries
     const wsRoot = resolveWorkspaceRoot(args);
     const storage = getStorage();
-    const db = storage.getDb(wsRoot);
+    const db = (storage as any).getDb(wsRoot);
 
     const rows = db.prepare(
         `SELECT id, agent_id, role, entry_type, content, created_at

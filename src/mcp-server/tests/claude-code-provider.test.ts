@@ -6,46 +6,75 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { ChildProcess } from "child_process";
+import { EventEmitter } from "events";
 import { ClaudeCodeProvider, resetClaudeCodeProvider } from "../src/bridge/claude-code-provider.js";
-import type { ExecFileFn } from "../src/bridge/claude-code-provider.js";
+import type { SpawnFn } from "../src/bridge/claude-code-provider.js";
+
+vi.mock("fs", () => ({
+    default: {
+        mkdirSync: vi.fn(),
+        writeFileSync: vi.fn(),
+        appendFileSync: vi.fn(),
+    },
+    mkdirSync: vi.fn(),
+    writeFileSync: vi.fn(),
+    appendFileSync: vi.fn(),
+}));
 
 /**
- * Creates a fake execFile that returns a mock child process with the given PID.
- * The callback (4th arg) is not called automatically, simulating a running process.
+ * Creates a fake spawn that returns a mock child process with the given PID.
+ * The close event is not emitted automatically, simulating a running process.
  */
-function createMockExecFile(pid: number | undefined): ExecFileFn {
-    return ((_cmd: string, _args: unknown, _opts: unknown, _cb?: Function) => {
-        return {
-            pid,
-            unref: vi.fn(),
-            exitCode: null,
-        } as unknown as ChildProcess;
-    }) as unknown as ExecFileFn;
+function createMockSpawn(pid: number | undefined): SpawnFn {
+    return ((_cmd: string, _args: unknown, _opts: unknown) => {
+        const mockProcess: any = new EventEmitter();
+        mockProcess.pid = pid;
+        mockProcess.unref = vi.fn();
+        mockProcess.exitCode = null;
+        mockProcess.stdout = new EventEmitter();
+        mockProcess.stderr = new EventEmitter();
+        return mockProcess as ChildProcess;
+    }) as unknown as SpawnFn;
 }
 
 /**
- * Creates a fake execFile that immediately invokes its callback.
+ * Creates a fake spawn that immediately invokes its callback.
  */
-function createCallbackExecFile(
+function createCallbackSpawn(
     err: Error | null,
     stdout: string,
     stderr: string,
-): ExecFileFn {
-    return ((_cmd: string, _args: unknown, _opts: unknown, cb?: Function) => {
-        if (cb) cb(err, stdout, stderr);
-        return { pid: 1234 } as unknown as ChildProcess;
-    }) as unknown as ExecFileFn;
+): SpawnFn {
+    return ((_cmd: string, _args: unknown, _opts: unknown) => {
+        const mockProcess: any = new EventEmitter();
+        mockProcess.pid = 1234;
+        mockProcess.unref = vi.fn();
+        mockProcess.exitCode = err ? 1 : 0;
+        mockProcess.stdout = new EventEmitter();
+        mockProcess.stderr = new EventEmitter();
+        
+        setTimeout(() => {
+            if (err) {
+                mockProcess.emit("error", err);
+            }
+            if (stdout) mockProcess.stdout.emit("data", stdout);
+            if (stderr) mockProcess.stderr.emit("data", stderr);
+            mockProcess.emit("close", mockProcess.exitCode);
+        }, 10);
+        
+        return mockProcess as ChildProcess;
+    }) as unknown as SpawnFn;
 }
 
 let provider: ClaudeCodeProvider;
-let mockExec: ReturnType<typeof vi.fn>;
+let mockSpawn: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
     resetClaudeCodeProvider();
-    mockExec = vi.fn(createMockExecFile(9999));
+    mockSpawn = vi.fn(createMockSpawn(9999));
     provider = new ClaudeCodeProvider({
         command: "claude",
-        _execFile: mockExec as unknown as ExecFileFn,
+        _spawn: mockSpawn as unknown as SpawnFn,
     });
 });
 
@@ -91,7 +120,7 @@ describe("ping()", () => {
     it("returns online when claude --version succeeds", async () => {
         const p = new ClaudeCodeProvider({
             command: "claude",
-            _execFile: createCallbackExecFile(null, "claude-code 1.0.0\n", ""),
+            _spawn: createCallbackSpawn(null, "claude-code 1.0.0\n", ""),
         });
 
         const health = await p.ping();
@@ -103,7 +132,7 @@ describe("ping()", () => {
     it("returns offline when CLI not found", async () => {
         const p = new ClaudeCodeProvider({
             command: "claude",
-            _execFile: createCallbackExecFile(
+            _spawn: createCallbackSpawn(
                 new Error("ENOENT: command not found"),
                 "",
                 "",
@@ -116,18 +145,17 @@ describe("ping()", () => {
     });
 
     it("calls claude --version", async () => {
-        const exec = vi.fn(createCallbackExecFile(null, "1.0.0", ""));
+        const _spawn = vi.fn(createCallbackSpawn(null, "1.0.0", ""));
         const p = new ClaudeCodeProvider({
             command: "claude",
-            _execFile: exec as unknown as ExecFileFn,
+            _spawn: _spawn as unknown as SpawnFn,
         });
 
         await p.ping();
-        expect(exec).toHaveBeenCalledWith(
+        expect(_spawn).toHaveBeenCalledWith(
             "claude",
             ["--version"],
-            expect.any(Object),
-            expect.any(Function),
+            expect.any(Object)
         );
     });
 });
@@ -146,7 +174,7 @@ describe("spawn()", () => {
         expect(result.promptLength).toBe("Test prompt".length);
 
         // Verify CLI args
-        const call = mockExec.mock.calls[0];
+        const call = mockSpawn.mock.calls[0];
         expect(call[0]).toBe("claude");
         const args = call[1] as string[];
         expect(args).toContain("--print");
@@ -158,7 +186,7 @@ describe("spawn()", () => {
     it("returns failure when PID is undefined", async () => {
         const p = new ClaudeCodeProvider({
             command: "claude",
-            _execFile: createMockExecFile(undefined),
+            _spawn: createMockSpawn(undefined),
         });
 
         const result = await p.spawn("Test prompt");
@@ -167,17 +195,17 @@ describe("spawn()", () => {
     });
 
     it("respects custom config", async () => {
-        const exec = vi.fn(createMockExecFile(8888));
+        const _spawn = vi.fn(createMockSpawn(8888));
         const p = new ClaudeCodeProvider({
             command: "/usr/local/bin/claude",
             maxTurns: 10,
             allowedTools: "Edit,Write",
-            _execFile: exec as unknown as ExecFileFn,
+            _spawn: _spawn as unknown as SpawnFn,
         });
 
         await p.spawn("Custom prompt");
 
-        const call = exec.mock.calls[0];
+        const call = _spawn.mock.calls[0];
         expect(call[0]).toBe("/usr/local/bin/claude");
         const args = call[1] as string[];
         expect(args).toContain("10"); // maxTurns

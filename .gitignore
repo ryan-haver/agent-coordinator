@@ -14,6 +14,7 @@ quota_snapshot.json
 swarm-agent-*.json
 swarm-manifest.md.bak
 swarm-docs/
+.swarm/
 
 # Sensitive / debug artifacts
 devtools_har_files/

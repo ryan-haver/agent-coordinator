@@ -533,6 +533,27 @@ export class SqliteStorageAdapter implements StorageAdapter {
 
             const needsAction = (supervision.toLowerCase().includes("gate") || supervision === "2") && allPhaseAgentsDone && phase !== "done";
 
+            // Get detailed agent list and their phases/statuses
+            const allAgentsData = db.prepare(
+                "SELECT agent_id, role, phase, status FROM agent_progress WHERE session_id = ?"
+            ).all(sessionId) as Array<{ agent_id: string; role: string; phase: string; status: string }>;
+
+            // Get session telemetry
+            let telemetry = { total_calls: 0, avg_duration_ms: 0, failures: 0 };
+            try {
+                const telRow = db.prepare(`
+                    SELECT COUNT(*) as total_calls, AVG(duration_ms) as avg_duration, SUM(CASE WHEN success=0 THEN 1 ELSE 0 END) as failures
+                    FROM telemetry_buffer WHERE session_id = ?
+                `).get(sessionId) as { total_calls: number; avg_duration: number; failures: number } | undefined;
+                if (telRow) {
+                    telemetry = {
+                        total_calls: Number(telRow.total_calls || 0),
+                        avg_duration_ms: Math.round(Number(telRow.avg_duration || 0)),
+                        failures: Number(telRow.failures || 0)
+                    };
+                }
+            } catch { /* ignore if table not ready */ }
+
             const statusObj = {
                 task,
                 phase,
@@ -542,7 +563,9 @@ export class SqliteStorageAdapter implements StorageAdapter {
                 agents_pending: pending,
                 last_event: lastEvent,
                 needs_user_action: needsAction,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                agents: allAgentsData,
+                telemetry
             };
             fs.writeFileSync(path.join(wsRoot, "swarm_status.json"), JSON.stringify(statusObj, null, 2));
         } catch (e) {

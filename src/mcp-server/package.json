@@ -3,10 +3,14 @@
   "version": "1.0.0",
   "description": "",
   "main": "build/index.js",
+  "bin": {
+    "agent-coordinator": "build/cli/index.js"
+  },
   "type": "module",
   "scripts": {
     "build": "tsc",
     "start": "node build/index.js",
+    "cli": "node build/cli/index.js",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:all": "vitest run --config vitest.integration.config.ts"

@@ -5,6 +5,15 @@
 
 export const TOOL_DEFINITIONS = [
     {
+        name: "stop_swarm",
+        description: "Stop all active agents currently running in the swarm",
+        inputSchema: {
+            type: "object",
+            properties: {},
+            required: []
+        }
+    },
+    {
         name: "create_swarm_manifest",
         description: "Initialize a new swarm manifest from template",
         inputSchema: {
@@ -611,6 +620,29 @@ export const TOOL_DEFINITIONS = [
                 data: { type: "object", description: "Optional extra data payload" }
             },
             required: ["message"]
+        }
+    },
+    // ── Phase 8: Provider Management ──────────────────────────────────
+    {
+        name: "list_providers",
+        description: "List all registered providers with health status, config, active counts, and capabilities. Use to inspect the multi-provider setup.",
+        inputSchema: {
+            type: "object",
+            properties: {}
+        }
+    },
+    {
+        name: "configure_provider",
+        description: "Update a provider's runtime configuration. Changes are persisted to providers.json and the registry is hot-reloaded.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                provider_name: { type: "string", description: "Provider to configure (antigravity, claude-code, codex)" },
+                enabled: { type: "boolean", description: "Enable or disable this provider" },
+                priority: { type: "number", description: "Routing priority (lower = preferred)" },
+                max_concurrent: { type: "number", description: "Maximum concurrent agents for this provider" }
+            },
+            required: ["provider_name"]
         }
     },
     // ── Phase 7C: Agent Bridge Integration ────────────────────────────

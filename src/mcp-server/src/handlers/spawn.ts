@@ -14,6 +14,7 @@ import { getErrorDetector } from "../bridge/error-detector.js";
 import { getVerifier, Verifier } from "../bridge/verifier.js";
 import { getOrchestrator } from "../bridge/orchestrator.js";
 import { getAutoApprover } from "../bridge/auto-approver.js";
+import type { SpawnResult } from "../bridge/provider.js";
 import { handleGetAgentPrompt } from "./agents.js";
 import { handleAddAgentToManifest } from "./agents.js";
 
@@ -93,16 +94,58 @@ export async function handleSpawnAgent(args: Record<string, unknown>): Promise<T
         }
     }
 
-    // 4. Select provider and spawn
+    // 4. Select provider and spawn with dynamic failover
     const registry = getProviderRegistry();
-    const selection = registry.selectProvider({
-        provider: providerName,
-        model: model !== "auto" ? model : undefined,
-        capabilities: ["file-edit"],
-    });
+    const attemptedProviders = new Set<string>();
+    
+    let result: SpawnResult | null = null;
+    let selectedProvider = "";
+    let providerReason = "";
 
-    if (!selection) {
-        // Fallback: try direct bridge client if no registry providers available
+    // Try up to 3 times to find a working provider if we hit quota limits
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const selection = registry.selectProvider({
+            provider: attempt === 0 ? providerName : undefined, // Only respect explicit on first try
+            model: model !== "auto" ? model : undefined,
+            capabilities: ["file-edit"],
+            excludeProviders: Array.from(attemptedProviders)
+        });
+
+        if (!selection) {
+            break; // No more eligible providers
+        }
+
+        selectedProvider = selection.provider.name;
+        providerReason = selection.reason;
+        attemptedProviders.add(selectedProvider);
+
+        result = await selection.provider.spawn(prompt, {
+            newConversation: true,
+            background: true,
+            agentManager: true,
+        });
+
+        if (result.success) {
+            break; // Success!
+        }
+
+        // Determine if error is a quota/rate-limit error that warrants a failover
+        const errStr = result.error?.toLowerCase() || "";
+        const isQuotaError = errStr.includes("429") || 
+                             errStr.includes("quota") || 
+                             errStr.includes("rate limit") ||
+                             errStr.includes("too many requests");
+
+        if (!isQuotaError) {
+            break; // Fatal error (e.g., config issue, bad prompt), don't retry
+        }
+        
+        // Is quota error; loop continues and excludes this provider
+        console.warn(`[Quota Router] Provider ${selectedProvider} hit quota limit. Failing over...`);
+    }
+
+    // Fallback: direct bridge client (legacy path) if all registry providers failed/exhausted
+    if (!result || (!result.success && Array.from(attemptedProviders).length === 0)) {
         const client = getBridgeClient();
         const fallbackResult = await client.spawn(prompt, {
             newConversation: true,
@@ -122,7 +165,7 @@ export async function handleSpawnAgent(args: Record<string, unknown>): Promise<T
         }
         limiter.recordSpawn();
         if (fallbackResult.conversationId) {
-            getErrorDetector().watchAgent(agent_id, fallbackResult.conversationId);
+            getErrorDetector().watchAgent(agent_id, fallbackResult.conversationId, "antigravity (fallback)");
         }
         return {
             toolResult: `Agent ${agent_id} spawned (fallback)`,
@@ -135,13 +178,6 @@ export async function handleSpawnAgent(args: Record<string, unknown>): Promise<T
             }, null, 2) }],
         };
     }
-
-    const result = await selection.provider.spawn(prompt, {
-        newConversation: true,
-        background: true,
-        agentManager: true,
-    });
-    const selectedProvider = selection.provider.name;
 
     if (!result.success) {
         limiter.recordError();
@@ -165,7 +201,7 @@ export async function handleSpawnAgent(args: Record<string, unknown>): Promise<T
     registry.recordSpawn(selectedProvider);
     if (result.conversationId) {
         const detector = getErrorDetector();
-        detector.watchAgent(agent_id, result.conversationId);
+        detector.watchAgent(agent_id, result.conversationId, selectedProvider);
     }
 
     return {
@@ -179,7 +215,7 @@ export async function handleSpawnAgent(args: Record<string, unknown>): Promise<T
                 phase,
                 model,
                 provider: selectedProvider,
-                providerReason: selection.reason,
+                providerReason,
                 conversationId: result.conversationId,
                 promptLength: result.promptLength,
                 stats: limiter.getStats(),
@@ -645,5 +681,38 @@ export async function handleAutoApprover(args: Record<string, unknown>): Promise
 
         default:
             throw new Error(`Unknown action: ${action}. Use start|stop|status|approve|track`);
+    }
+}
+
+/**
+ * stop_swarm — Stop all active agents across all providers.
+ * 
+ * Uses the ProviderRegistry to list and stop all running sessions.
+ */
+export async function handleStopSwarm(args: Record<string, unknown>): Promise<ToolResponse> {
+    const registry = getProviderRegistry();
+    const activeCount = registry.getTotalActiveCount();
+    
+    if (activeCount === 0) {
+        return {
+            toolResult: "No active swarm components found.",
+            content: [{
+                type: "text",
+                text: "No active agents are currently tracked by the registry."
+            }]
+        };
+    }
+
+    try {
+        await registry.stopAll();
+        return {
+            toolResult: "Swarm stop signal sent to all active agents.",
+            content: [{
+                type: "text",
+                text: "Successfully sent stop signal to all active agent processes."
+            }]
+        };
+    } catch (e: any) {
+        throw new Error(`Failed to stop swarm: ${e.message}`);
     }
 }

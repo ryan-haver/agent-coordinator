@@ -8,9 +8,10 @@
  * Cross-platform: uses child_process.execFile (no shell) and
  * os.platform() for process management.
  */
-import { execFile, type ChildProcess } from "child_process";
+import { spawn, type ChildProcess } from "child_process";
 import os from "os";
 import path from "path";
+import fs from "fs";
 import type {
     AgentProvider,
     ProviderHealth,
@@ -20,8 +21,8 @@ import type {
     SessionInfo,
 } from "./provider.js";
 
-/** Signature for execFile-compatible function */
-export type ExecFileFn = typeof execFile;
+/** Signature for spawn-compatible function */
+export type SpawnFn = typeof spawn;
 
 /** Configuration for the Claude Code provider */
 export interface ClaudeCodeConfig {
@@ -35,8 +36,8 @@ export interface ClaudeCodeConfig {
     workingDirectory?: string;
     /** Allowed tools pattern (default: "Edit,Write,Bash,mcp__*") */
     allowedTools?: string;
-    /** Injectable execFile for testing (default: child_process.execFile) */
-    _execFile?: ExecFileFn;
+    /** Injectable spawn for testing (default: child_process.spawn) */
+    _spawn?: SpawnFn;
 }
 
 /** Tracked session state */
@@ -60,6 +61,31 @@ const DEFAULT_CONFIG: ClaudeCodeConfig = {
     allowedTools: "Edit,Write,Bash,mcp__*",
 };
 
+const activeProcessPids = new Set<number>();
+
+let cleanupRegistered = false;
+function registerCleanupHook() {
+    if (cleanupRegistered) return;
+    cleanupRegistered = true;
+    
+    const cleanup = () => {
+        for (const pid of activeProcessPids) {
+            try {
+                if (os.platform() === "win32") {
+                    // Sync exec to ensure it runs before process dies
+                    require("child_process").execSync(`taskkill /PID ${pid} /T /F`);
+                } else {
+                    process.kill(pid, "SIGTERM");
+                }
+            } catch {}
+        }
+    };
+    
+    process.on("exit", cleanup);
+    process.on("SIGINT", () => { cleanup(); process.exit(1); });
+    process.on("SIGTERM", () => { cleanup(); process.exit(1); });
+}
+
 /**
  * Claude Code Provider — spawns agents via the `claude` CLI.
  *
@@ -77,11 +103,12 @@ export class ClaudeCodeProvider implements AgentProvider {
 
     private config: ClaudeCodeConfig;
     private sessions = new Map<string, TrackedSession>();
-    private _exec: ExecFileFn;
+    private _spawnFn: SpawnFn;
 
     constructor(config?: Partial<ClaudeCodeConfig>) {
         this.config = { ...DEFAULT_CONFIG, ...config };
-        this._exec = config?._execFile ?? execFile;
+        this._spawnFn = config?._spawn ?? spawn;
+        registerCleanupHook();
     }
 
     /**
@@ -92,13 +119,25 @@ export class ClaudeCodeProvider implements AgentProvider {
         const start = Date.now();
         return new Promise<ProviderHealth>((resolve) => {
             const cmd = this.config.command ?? "claude";
-            this._exec(cmd, ["--version"], { timeout: 5000 }, (err, stdout) => {
+            const child = this._spawnFn(cmd, ["--version"], {});
+            let stdout = "";
+            let stderr = "";
+            child.stdout?.on("data", (chunk) => { stdout += chunk.toString(); });
+            child.stderr?.on("data", (chunk) => { stderr += chunk.toString(); });
+            child.on("error", (err) => {
+                resolve({
+                    online: false,
+                    latencyMs: Date.now() - start,
+                    error: `CLI not found or failed: ${err.message}`,
+                });
+            });
+            child.on("close", (code) => {
                 const latencyMs = Date.now() - start;
-                if (err) {
+                if (code !== 0) {
                     resolve({
                         online: false,
                         latencyMs,
-                        error: `CLI not found or failed: ${err.message}`,
+                        error: `CLI error [exit ${code}]: ${stderr}`,
                     });
                 } else {
                     resolve({
@@ -146,21 +185,7 @@ export class ClaudeCodeProvider implements AgentProvider {
 
         return new Promise<SpawnResult>((resolve) => {
             try {
-                const child = this._exec(cmd, args, {
-                    cwd,
-                    maxBuffer: 50 * 1024 * 1024, // 50MB
-                    timeout: maxTurns * 60 * 1000, // ~1 min per turn
-                }, (err, stdout, stderr) => {
-                    // Process completed
-                    const pid = String(child.pid ?? "unknown");
-                    const session = this.sessions.get(pid);
-                    if (session) {
-                        session.stdout = stdout;
-                        session.stderr = stderr;
-                        session.status = err ? "failed" : "completed";
-                        session.exitCode = child.exitCode ?? undefined;
-                    }
-                });
+                const child = this._spawnFn(cmd, args, { cwd });
 
                 if (!child.pid) {
                     resolve({
@@ -171,9 +196,10 @@ export class ClaudeCodeProvider implements AgentProvider {
                 }
 
                 const pid = String(child.pid);
-
+                activeProcessPids.add(child.pid);
+                
                 // Track the session
-                this.sessions.set(pid, {
+                const session: TrackedSession = {
                     pid: child.pid,
                     process: child,
                     startedAt: Date.now(),
@@ -182,6 +208,41 @@ export class ClaudeCodeProvider implements AgentProvider {
                     status: "running",
                     stdout: "",
                     stderr: "",
+                };
+                this.sessions.set(pid, session);
+
+                // Set up progress recording to shared state protocol
+                const agentDir = path.join(cwd, ".agent");
+                const progressFile = path.join(agentDir, `progress-${pid}.md`);
+                fs.mkdirSync(agentDir, { recursive: true });
+                
+                // Truncate/create the new progress file
+                fs.writeFileSync(progressFile, `# Claude Code Transcript (PID: ${pid})\n\n`);
+
+                const appendLog = (stream: "stdout"|"stderr", data: unknown) => {
+                    const text = String(data);
+                    if (stream === "stdout") session.stdout += text;
+                    else session.stderr += text;
+                    
+                    try {
+                        // Append raw text block
+                        fs.appendFileSync(progressFile, text);
+                    } catch {}
+                };
+
+                child.stdout?.on("data", (chunk) => appendLog("stdout", chunk));
+                child.stderr?.on("data", (chunk) => appendLog("stderr", chunk));
+
+                child.on("close", (code) => {
+                    session.status = code === 0 ? "completed" : "failed";
+                    session.exitCode = code ?? undefined;
+                    activeProcessPids.delete(session.pid);
+                });
+
+                child.on("error", (err) => {
+                    session.status = "failed";
+                    session.stderr += err.message;
+                    activeProcessPids.delete(session.pid);
                 });
 
                 // Detach so the parent doesn't block
@@ -253,8 +314,10 @@ export class ClaudeCodeProvider implements AgentProvider {
                 this.killProcess(session.pid);
             }
             session.status = "failed";
+            activeProcessPids.delete(session.pid);
         } catch {
             // Process may have already exited
+            activeProcessPids.delete(session.pid);
         }
     }
 
@@ -275,17 +338,12 @@ export class ClaudeCodeProvider implements AgentProvider {
      * Kill a process (cross-platform).
      */
     private killProcess(pid: number): void {
-        if (os.platform() === "win32") {
-            // Windows: use taskkill for process tree
-            this._exec("taskkill", ["/PID", String(pid), "/T", "/F"], () => {});
-        } else {
-            // Unix: send SIGTERM
-            try {
-                process.kill(pid, "SIGTERM");
-            } catch {
-                // Process already exited
-            }
-        }
+        const killCmd = process.platform === "win32" ? "taskkill" : "kill";
+        const killArgs = process.platform === "win32" ? ["/PID", String(pid), "/T", "/F"] : ["-9", String(pid)];
+
+        // We use actual spawn here rather than injected _spawnFn because we need 
+        // to reliably kill the process
+        spawn(killCmd, killArgs).on("error", () => {});
     }
 }
 

@@ -20,18 +20,21 @@ export type CollectionName =
     | "agent_notes"
     | "code_snippets"
     | "project_docs"
-    | "issues";
+    | "issues"
+    | "shared_journal";
 
 export const ALL_COLLECTIONS: CollectionName[] = [
     "agent_notes",
     "code_snippets",
     "project_docs",
-    "issues"
+    "issues",
+    "shared_journal"
 ];
 
 export const COLLECTION_DESCRIPTIONS: Record<CollectionName, string> = {
     agent_notes: "Agent handoff notes, observations, and decisions",
     code_snippets: "Code fragments with file path and function context",
     project_docs: "Specs, plans, walkthroughs, and documentation",
-    issues: "Issues, bugs, and their resolutions"
+    issues: "Issues, bugs, and their resolutions",
+    shared_journal: "Promoted journal entries shared across all agents"
 };

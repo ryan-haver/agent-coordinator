@@ -20,6 +20,16 @@
       "command": "codex",
       "priority": 3,
       "maxConcurrent": 2
+    },
+    "headless": {
+      "enabled": false,
+      "type": "http",
+      "endpoint": "http://127.0.0.1:11434/v1",
+      "settings": {
+        "defaultModel": "llama3"
+      },
+      "priority": 4,
+      "maxConcurrent": 1
     }
   },
   "routing": {

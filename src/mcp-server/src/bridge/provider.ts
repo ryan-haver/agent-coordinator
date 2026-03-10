@@ -51,6 +51,8 @@ export interface AgentStatus {
     lastActiveAt?: number;
     /** Error message if state is "failed" */
     error?: string;
+    /** The last message from the agent */
+    lastMessage?: string;
 }
 
 /** Brief info about an active session */
