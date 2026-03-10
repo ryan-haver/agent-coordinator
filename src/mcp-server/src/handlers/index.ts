@@ -50,7 +50,7 @@ import { handleGetMyTelemetry, handleGetSessionTelemetry, handleGetSlowOperation
 import { handleStoreMemory, handleSemanticSearch, handleFindSimilarCode, handleFindPastSolutions } from "./memory.js";
 
 // Bridge handlers (agent spawn via Agent Bridge extension)
-import { handleSpawnAgent, handleGetBridgeStatus, handleStopAgent, handleVerifyAgentWork, handleRunSwarm, handleExecuteSwarm, handleRetryAgent } from "./spawn.js";
+import { handleSpawnAgent, handleGetBridgeStatus, handleStopAgent, handleVerifyAgentWork, handleRunSwarm, handleExecuteSwarm, handleRetryAgent, handleAutoApprover } from "./spawn.js";
 
 // Model catalog handler
 import { handleSyncModelCatalog } from "./catalog.js";
@@ -143,6 +143,7 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
     run_swarm: handleRunSwarm,
     execute_swarm: handleExecuteSwarm,
     retry_agent: handleRetryAgent,
+    auto_approver: handleAutoApprover,
 
     // Model Catalog
     sync_model_catalog: handleSyncModelCatalog,

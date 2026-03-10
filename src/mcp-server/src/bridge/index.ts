@@ -40,3 +40,7 @@ export type { TaskBoardSnapshot, PhaseStatus, TaskBoardEntry } from "./task-boar
 // Template engine (prompt variable interpolation)
 export { getPopulatedPrompt, interpolate, buildVariableMap, getTurnLimit, listAvailableRoles } from "./template-engine.js";
 export type { TemplateContext } from "./template-engine.js";
+
+// Auto-approver (Phase 7G — programmatic interaction approval)
+export { AutoApprover, getAutoApprover, LanguageServerClient, getLanguageServerClient } from "./auto-approver.js";
+export type { AutoApproverConfig, InteractionApproval, ApprovalResult, LanguageServerConnection } from "./auto-approver.js";

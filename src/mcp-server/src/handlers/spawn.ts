@@ -11,6 +11,7 @@ import { getRateLimiter } from "../bridge/rate-limiter.js";
 import { getErrorDetector } from "../bridge/error-detector.js";
 import { getVerifier, Verifier } from "../bridge/verifier.js";
 import { getOrchestrator } from "../bridge/orchestrator.js";
+import { getAutoApprover } from "../bridge/auto-approver.js";
 import { handleGetAgentPrompt } from "./agents.js";
 import { handleAddAgentToManifest } from "./agents.js";
 
@@ -310,6 +311,7 @@ export async function handleExecuteSwarm(args: Record<string, unknown>): Promise
     const autoVerify = (args?.auto_verify as boolean) ?? true;
     const autoRetry = (args?.auto_retry as boolean) ?? true;
     const dryRun = (args?.dry_run as boolean) ?? false;
+    const autoApprove = (args?.auto_approve as boolean) ?? true;
 
     // Read manifest
     const { getStorage } = await import("../storage/singleton.js");
@@ -346,10 +348,16 @@ export async function handleExecuteSwarm(args: Record<string, unknown>): Promise
         throw new Error("Agent Bridge is offline. Start the Antigravity extension first.");
     }
 
+    // Start auto-approver if requested
+    const approver = getAutoApprover();
+    if (autoApprove) {
+        approver.start();
+    }
+
     // Execute with callbacks that wire into existing handlers
     const result = await orchestrator.execute(manifest, {
         spawnAgent: async (agent) => {
-            await handleSpawnAgent({
+            const spawnResult = await handleSpawnAgent({
                 role: agent.role,
                 mission: `Execute assigned scope: ${agent.scope}`,
                 scope: agent.scope,
@@ -358,6 +366,16 @@ export async function handleExecuteSwarm(args: Record<string, unknown>): Promise
                 model: agent.model,
                 workspace_root: wsRoot,
             });
+
+            // Track spawned cascade for auto-approval
+            if (autoApprove && spawnResult?.content?.[0]) {
+                try {
+                    const data = JSON.parse((spawnResult.content[0] as { text: string }).text);
+                    if (data.conversationId) {
+                        approver.trackCascade(data.conversationId);
+                    }
+                } catch { /* best effort */ }
+            }
         },
         retryAgent: async (agent, retryContext, attempt) => {
             await handleSpawnAgent({
@@ -372,6 +390,11 @@ export async function handleExecuteSwarm(args: Record<string, unknown>): Promise
         },
     });
 
+    // Stop auto-approver after execution completes
+    if (autoApprove) {
+        approver.stop();
+    }
+
     return {
         toolResult: JSON.stringify(result),
         content: [{
@@ -382,6 +405,7 @@ export async function handleExecuteSwarm(args: Record<string, unknown>): Promise
                 completedAgents: result.completedAgents,
                 failedAgents: result.failedAgents,
                 totalDurationMs: result.totalDurationMs,
+                autoApprover: approver.getStatus(),
                 phases: result.phases.map(p => ({
                     phase: p.phase,
                     allPassed: p.allPassed,
@@ -439,4 +463,108 @@ export async function handleRetryAgent(args: Record<string, unknown>): Promise<T
     });
 
     return result;
+}
+
+/**
+ * auto_approver — Control the auto-approver for agent interactions.
+ *
+ * Actions:
+ *   - start: Begin auto-approving interactions for tracked cascades
+ *   - stop: Stop auto-approving
+ *   - status: Get current auto-approver status and log
+ *   - approve: Manually approve a specific interaction
+ *   - track: Track a cascade ID for auto-approval
+ */
+export async function handleAutoApprover(args: Record<string, unknown>): Promise<ToolResponse> {
+    const action = args?.action as string;
+
+    if (!action) {
+        throw new Error("Missing required argument: action (start|stop|status|approve|track)");
+    }
+
+    const approver = getAutoApprover();
+
+    switch (action) {
+        case "start": {
+            const config = args?.config as Record<string, unknown> | undefined;
+            if (config) {
+                approver.updateConfig({
+                    pollIntervalMs: config.poll_interval_ms as number | undefined,
+                    approveFileWrites: config.approve_file_writes as boolean | undefined,
+                    approveCommands: config.approve_commands as boolean | undefined,
+                });
+            }
+            approver.start();
+            return {
+                toolResult: "Auto-approver started",
+                content: [{
+                    type: "text",
+                    text: JSON.stringify({ success: true, status: approver.getStatus() }, null, 2),
+                }],
+            };
+        }
+
+        case "stop": {
+            approver.stop();
+            return {
+                toolResult: "Auto-approver stopped",
+                content: [{
+                    type: "text",
+                    text: JSON.stringify({ success: true, status: approver.getStatus() }, null, 2),
+                }],
+            };
+        }
+
+        case "status": {
+            return {
+                toolResult: JSON.stringify(approver.getStatus()),
+                content: [{
+                    type: "text",
+                    text: JSON.stringify({
+                        status: approver.getStatus(),
+                        recentApprovals: approver.getLog().slice(-10),
+                    }, null, 2),
+                }],
+            };
+        }
+
+        case "track": {
+            const cascadeId = args?.cascade_id as string;
+            if (!cascadeId) throw new Error("Missing cascade_id for track action");
+            approver.trackCascade(cascadeId);
+            return {
+                toolResult: `Tracking cascade ${cascadeId}`,
+                content: [{
+                    type: "text",
+                    text: JSON.stringify({ success: true, cascadeId, status: approver.getStatus() }, null, 2),
+                }],
+            };
+        }
+
+        case "approve": {
+            const { getAutoApprover: getAA } = await import("../bridge/auto-approver.js");
+            const aa = getAA();
+            const cascadeId = args?.cascade_id as string;
+            const trajectoryId = args?.trajectory_id as string;
+            const stepIndex = args?.step_index as number;
+            const type = args?.type as "filePermission" | "runCommand";
+            const target = args?.target as string;
+
+            if (!cascadeId || !trajectoryId || stepIndex === undefined || !type || !target) {
+                throw new Error("Missing required args: cascade_id, trajectory_id, step_index, type, target");
+            }
+
+            const result = await aa.approve({ cascadeId, trajectoryId, stepIndex, type, target });
+            return {
+                toolResult: JSON.stringify(result),
+                content: [{
+                    type: "text",
+                    text: JSON.stringify(result, null, 2),
+                }],
+            };
+        }
+
+        default:
+            throw new Error(`Unknown action: ${action}. Use start|stop|status|approve|track`);
+    }
 }

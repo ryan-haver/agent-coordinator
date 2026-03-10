@@ -688,6 +688,7 @@ export const TOOL_DEFINITIONS = [
             properties: {
                 auto_verify: { type: "boolean", description: "Run verification after each phase (default: true)" },
                 auto_retry: { type: "boolean", description: "Auto-retry failed agents up to max_retries (default: true)" },
+                auto_approve: { type: "boolean", description: "Auto-approve file writes and commands during execution (default: true)" },
                 dry_run: { type: "boolean", description: "Preview execution plan without spawning agents (default: false)" },
                 workspace_root: { type: "string", description: "Optional workspace root override" }
             }
@@ -705,6 +706,32 @@ export const TOOL_DEFINITIONS = [
                 workspace_root: { type: "string", description: "Optional workspace root override" }
             },
             required: ["agent_id"]
+        }
+    },
+    // ── Phase 7G: Auto-Approver ───────────────────────────────────────
+    {
+        name: "auto_approver",
+        description: "Control the auto-approver for agent interactions. Programmatically approves file write and command execution dialogs that the Agent Manager shows. Actions: start, stop, status, approve, track.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                action: { type: "string", enum: ["start", "stop", "status", "approve", "track"], description: "Action to perform" },
+                cascade_id: { type: "string", description: "Cascade ID (for track/approve actions)" },
+                trajectory_id: { type: "string", description: "Trajectory ID (for approve action)" },
+                step_index: { type: "number", description: "Step index (for approve action)" },
+                type: { type: "string", enum: ["filePermission", "runCommand"], description: "Interaction type (for approve action)" },
+                target: { type: "string", description: "File path or command line (for approve action)" },
+                config: {
+                    type: "object",
+                    description: "Configuration overrides (for start action)",
+                    properties: {
+                        poll_interval_ms: { type: "number", description: "Poll interval in ms" },
+                        approve_file_writes: { type: "boolean", description: "Auto-approve file writes" },
+                        approve_commands: { type: "boolean", description: "Auto-approve commands" }
+                    }
+                }
+            },
+            required: ["action"]
         }
     },
     // ── Phase 8A: Model Catalog Sync ─────────────────────────────────
