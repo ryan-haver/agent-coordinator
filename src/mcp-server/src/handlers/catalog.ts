@@ -9,6 +9,7 @@ import fs from "fs";
 import path from "path";
 import { type ToolResponse, getGlobalConfigPath } from "./context.js";
 import { getModelCatalog } from "../bridge/model-catalog.js";
+import { getQuotaMonitor } from "../bridge/quota-monitor.js";
 
 export async function handleSyncModelCatalog(args: Record<string, unknown>): Promise<ToolResponse> {
     const updateFallback = args.update_fallback === true;
@@ -33,6 +34,30 @@ export async function handleSyncModelCatalog(args: Record<string, unknown>): Pro
         const marker = m.active ? " ← ACTIVE" : "";
         lines.push(`  • ${m.label} [${m.family}]${marker}`);
     }
+
+    // Quota buckets
+    const monitor = getQuotaMonitor();
+    const status = monitor.getStatusReport();
+
+    lines.push(``);
+    lines.push(`Quota Buckets:`);
+    for (const b of status.buckets) {
+        const pct = b.quotaPct !== null ? `${b.quotaPct.toFixed(1)}%` : "unknown";
+        const reset = b.resetInSec !== null ? ` | reset in ${Math.round(b.resetInSec / 60)}m` : "";
+        const statusLabel = b.status !== "unknown" ? ` [${b.status.toUpperCase()}]` : "";
+        lines.push(`  ${b.displayName}: ${pct}${reset}${statusLabel}`);
+        for (const model of b.models) {
+            lines.push(`    - ${model}`);
+        }
+    }
+
+    // Pivot recommendation
+    lines.push(``);
+    lines.push(`Pivot: ${status.recommendation.reason}`);
+    if (status.recommendation.shouldPivot && status.recommendation.targetModel) {
+        lines.push(`  → Switch to: ${status.recommendation.targetModel}`);
+    }
+    lines.push(`Snapshot: ${status.snapshotAge} (${status.source})`);
 
     // Diff with fallback JSON
     const diff = catalog.diffWithFallbackJson();
@@ -76,6 +101,8 @@ export async function handleSyncModelCatalog(args: Record<string, unknown>): Pro
             activeModel: snapshot.activeModel,
             subscriptionTier: snapshot.subscriptionTier,
             diff,
+            quotaBuckets: status.buckets,
+            pivotRecommendation: status.recommendation,
         }),
         content: [{ type: "text", text: lines.join("\n") }],
     };

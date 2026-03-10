@@ -44,6 +44,53 @@ export interface CatalogSnapshot {
     timestamp: number;
 }
 
+/**
+ * A quota bucket groups models that share a common credit pool.
+ * Based on Antigravity Quota Monitor UI:
+ *   - "gemini" bucket: Gemini 3.1 Pro (High), Gemini 3.1 Pro (Low)
+ *   - "claude" bucket: Claude Sonnet 4.6, Claude Opus 4.6, GPT-OSS 120B
+ *   - "flash" bucket: Gemini 3 Flash (appears unbucketed / unlimited)
+ */
+export interface QuotaBucket {
+    /** Bucket identifier: "gemini", "claude", "flash" */
+    name: string;
+    /** Human label matching the Quota Monitor UI */
+    displayName: string;
+    /** Model labels in this bucket */
+    models: string[];
+    /** Quota remaining percentage (null if unknown) */
+    quotaPct: number | null;
+    /** Seconds until quota resets (null if unknown) */
+    resetInSec: number | null;
+    /** ISO timestamp of next reset (null if unknown) */
+    resetTime: string | null;
+    /** Health status: healthy | warning | exhausted */
+    status: "healthy" | "warning" | "exhausted" | "unknown";
+}
+
+/**
+ * Bucket assignment rules — maps model labels to bucket names.
+ * Flash is separate because it has its own (seemingly unlimited) quota.
+ * GPT-OSS is grouped with Claude per the Quota Monitor UI.
+ */
+const BUCKET_RULES: Array<{ bucket: string; displayName: string; match: (label: string) => boolean }> = [
+    {
+        bucket: "gemini",
+        displayName: "Gemini",
+        match: (l) => /gemini.*pro/i.test(l),
+    },
+    {
+        bucket: "flash",
+        displayName: "Flash",
+        match: (l) => /flash/i.test(l),
+    },
+    {
+        bucket: "claude",
+        displayName: "Claude",
+        match: (l) => /claude|opus|sonnet|gpt|oss/i.test(l),
+    },
+];
+
 // ── Protobuf Wire Format Parser ────────────────────────────────────
 
 interface PbField {
@@ -130,7 +177,7 @@ function extractStrings(
 
 // ── State DB Reader ────────────────────────────────────────────────
 
-function getStateDbPath(): string {
+export function getStateDbPath(): string {
     const platform = os.platform();
     if (platform === "win32") {
         return path.join(process.env.APPDATA ?? "", "Antigravity", "User", "globalStorage", "state.vscdb");
@@ -141,12 +188,35 @@ function getStateDbPath(): string {
     }
 }
 
-function inferFamily(label: string): string {
+export function inferFamily(label: string): string {
     const lower = label.toLowerCase();
     if (lower.includes("gemini")) return "gemini";
     if (lower.includes("claude") || lower.includes("sonnet") || lower.includes("opus")) return "claude";
     if (lower.includes("gpt") || lower.includes("oss")) return "gpt";
     return "unknown";
+}
+
+/**
+ * Read the modelCredits key from state.vscdb.
+ * Returns raw value string if present, null if empty/missing.
+ */
+export function readModelCredits(): string | null {
+    const dbPath = getStateDbPath();
+    if (!fs.existsSync(dbPath)) return null;
+    let Database: typeof import("better-sqlite3");
+    try { Database = require("better-sqlite3"); } catch { return null; }
+    let db: InstanceType<typeof Database>;
+    try { db = new Database(dbPath, { readonly: true }); } catch { return null; }
+    try {
+        const row = db.prepare("SELECT value FROM ItemTable WHERE key = ?")
+            .get("antigravityUnifiedStateSync.modelCredits") as { value: string } | undefined;
+        const val = row?.value ? String(row.value) : null;
+        return val && val.length > 0 ? val : null;
+    } catch {
+        return null;
+    } finally {
+        try { db.close(); } catch { /* ignore */ }
+    }
 }
 
 /**
@@ -362,6 +432,61 @@ export class ModelCatalog {
     /** Invalidate the cache so the next call re-reads. */
     invalidate(): void {
         this.cache = null;
+    }
+
+    /**
+     * Get quota buckets with model assignments.
+     * Quota percentages will be null until a quota source is available.
+     */
+    getQuotaBuckets(quotaData?: Record<string, { pct: number; resetInSec?: number; resetTime?: string }>): QuotaBucket[] {
+        const models = this.getModelLabels();
+        const bucketMap = new Map<string, { displayName: string; models: string[] }>();
+
+        for (const label of models) {
+            const rule = BUCKET_RULES.find((r) => r.match(label));
+            const bucketName = rule?.bucket ?? "unknown";
+            const displayName = rule?.displayName ?? "Unknown";
+            if (!bucketMap.has(bucketName)) {
+                bucketMap.set(bucketName, { displayName, models: [] });
+            }
+            bucketMap.get(bucketName)!.models.push(label);
+        }
+
+        const buckets: QuotaBucket[] = [];
+        for (const [name, info] of bucketMap) {
+            const quota = quotaData?.[name];
+            const pct = quota?.pct ?? null;
+            let status: QuotaBucket["status"] = "unknown";
+            if (pct !== null) {
+                if (pct <= 5) status = "exhausted";
+                else if (pct <= 20) status = "warning";
+                else status = "healthy";
+            }
+            buckets.push({
+                name,
+                displayName: info.displayName,
+                models: info.models,
+                quotaPct: pct,
+                resetInSec: quota?.resetInSec ?? null,
+                resetTime: quota?.resetTime ?? null,
+                status,
+            });
+        }
+        return buckets;
+    }
+
+    /**
+     * Find the best pivot target when a bucket is exhausted.
+     * Returns the healthiest bucket that is NOT the exhausted one.
+     */
+    findPivotTarget(exhaustedBucket: string, quotaData?: Record<string, { pct: number }>): QuotaBucket | null {
+        const buckets = this.getQuotaBuckets(
+            quotaData as Record<string, { pct: number; resetInSec?: number; resetTime?: string }> | undefined
+        );
+        const candidates = buckets
+            .filter((b) => b.name !== exhaustedBucket && b.status !== "exhausted" && b.models.length > 0)
+            .sort((a, b) => (b.quotaPct ?? 100) - (a.quotaPct ?? 100));
+        return candidates[0] ?? null;
     }
 
     /**

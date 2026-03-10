@@ -9,6 +9,7 @@ import os from "os";
 import fs from "fs";
 import { type ToolResponse, getGlobalConfigPath } from "./context.js";
 import { loadConfigs, saveConfigs, emitNotification, type WebhookConfig } from "../notifications/dispatcher.js";
+import { getQuotaMonitor } from "../bridge/quota-monitor.js";
 
 export async function handleCheckQuota(_args: Record<string, unknown>): Promise<ToolResponse> {
     const quotaPath = path.join(getGlobalConfigPath(), 'quota_snapshot.json');
@@ -31,7 +32,7 @@ interface RoutingRecommendation {
     quota_remaining_pct: Record<string, number>;
     fallback_chain: string[];
     task_type?: string;
-    action?: "spawn_agent" | "switch_model" | "switch_back";
+    action?: "spawn_agent" | "switch_model" | "switch_back" | "auto_pivot";
     platform?: string;
     switch_back_available?: boolean;
 }
@@ -108,7 +109,19 @@ export async function handleGetRoutingRecommendation(args: Record<string, unknow
         const exhaustedThreshold = platform.quota_exhausted_threshold ?? 5;
         const refreshedThreshold = platform.quota_refreshed_threshold ?? 30;
 
-        // Find quota for each model family
+        // ── Try QuotaMonitor (live bucket-aware) first ─────────────────
+        const monitor = getQuotaMonitor();
+        const pivotRec = monitor.getPivotRecommendation();
+        const snapshot = monitor.getQuotaSnapshot();
+
+        // Merge QuotaMonitor bucket data into legacys quotaRemaining
+        for (const [bucket, q] of Object.entries(snapshot.buckets)) {
+            if (!quotaRemaining[bucket]) {
+                quotaRemaining[bucket] = q.pct;
+            }
+        }
+
+        // Find quota for each model family (legacy or bucket-aware)
         const findQuota = (model: string): number | null => {
             const family = model.toLowerCase().split(' ')[0];
             const entry = Object.entries(quotaRemaining).find(([k]) =>
@@ -122,16 +135,19 @@ export async function handleGetRoutingRecommendation(args: Record<string, unknow
 
         let recommended = preferred;
         let reason: string;
-        let action: "spawn_agent" | "switch_model" | "switch_back";
+        let action: "spawn_agent" | "switch_model" | "switch_back" | "auto_pivot";
         let switchBackAvailable = false;
 
-        if (preferredQuota !== null && preferredQuota < exhaustedThreshold) {
+        // Check pivot recommendation from QuotaMonitor first
+        if (pivotRec.shouldPivot && pivotRec.targetModel) {
+            recommended = pivotRec.targetModel;
+            reason = pivotRec.reason;
+            action = "auto_pivot";
+        } else if (preferredQuota !== null && preferredQuota < exhaustedThreshold) {
             // Preferred model exhausted → switch to secondary
             recommended = secondary;
             reason = `Antigravity: ${preferred} quota exhausted (${preferredQuota}% < ${exhaustedThreshold}% threshold). Switch global model to ${secondary}.`;
             action = "switch_model";
-
-            // Check if switch-back is possible (shouldn't be, since we just exhausted)
             switchBackAvailable = false;
         } else if (secondaryQuota !== null && secondaryQuota < exhaustedThreshold
                    && (preferredQuota === null || preferredQuota >= refreshedThreshold)) {
@@ -186,6 +202,12 @@ export async function handleGetRoutingRecommendation(args: Record<string, unknow
         if (switchBackAvailable) {
             lines.push("", `✅ Switch-back available: ${preferred} quota has refreshed.`);
         }
+
+        // Include pivot recommendation output
+        if (pivotRec.exhaustedBucket) {
+            lines.push("", `🔄 Pivot: ${pivotRec.reason}`);
+        }
+        lines.push("", `Quota source: ${snapshot.source}`);
 
         return {
             toolResult: JSON.stringify(result),

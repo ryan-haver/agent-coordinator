@@ -26,5 +26,9 @@ export type { RegisteredProvider, ProviderRequirements, ProviderSelection } from
 export { AntigravityProvider, getAntigravityProvider } from "./antigravity-provider.js";
 
 // Model catalog (dynamic model list from state.vscdb)
-export { ModelCatalog, getModelCatalog, resetModelCatalog } from "./model-catalog.js";
-export type { ModelEntry, CatalogSnapshot } from "./model-catalog.js";
+export { ModelCatalog, getModelCatalog, resetModelCatalog, readModelCredits } from "./model-catalog.js";
+export type { ModelEntry, CatalogSnapshot, QuotaBucket } from "./model-catalog.js";
+
+// Quota monitor (bucket-aware quota tracking and pivot recommendations)
+export { QuotaMonitor, getQuotaMonitor, resetQuotaMonitor } from "./quota-monitor.js";
+export type { QuotaSnapshot, BucketQuota, PivotRecommendation } from "./quota-monitor.js";
