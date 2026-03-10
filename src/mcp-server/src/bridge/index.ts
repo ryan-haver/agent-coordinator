@@ -15,3 +15,12 @@ export type { VerificationCheck, CheckResult, VerificationResult } from "./verif
 
 export { Orchestrator, getOrchestrator, parseManifestPhases, buildExecutionPlan } from "./orchestrator.js";
 export type { OrchestratorConfig, PhaseResult, AgentResult, SwarmExecutionResult } from "./orchestrator.js";
+
+// Provider abstraction layer (Phase 8A)
+export type { AgentProvider, ProviderConfig, ProviderHealth, AgentStatus, SessionInfo } from "./provider.js";
+export type { SpawnOptions as ProviderSpawnOptions, SpawnResult as ProviderSpawnResult } from "./provider.js";
+
+export { ProviderRegistry, getProviderRegistry, resetProviderRegistry } from "./registry.js";
+export type { RegisteredProvider, ProviderRequirements, ProviderSelection } from "./registry.js";
+
+export { AntigravityProvider, getAntigravityProvider } from "./antigravity-provider.js";

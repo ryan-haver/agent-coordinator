@@ -58,6 +58,8 @@ Sourced from [Antigravity Cockpit](https://github.com/jlcodes99/vscode-antigravi
 | **5C** | TimescaleDB — Telemetry & Logs | ✅ Complete | Dual-write pipeline, agent_events, model_performance |
 | **5D** | Documentation | ✅ Complete | Tool reference, architecture, operations, developer guide |
 | **6** | Temporal RAG & CI | ✅ Complete | 2 new analytical tools (41 total), CI pipeline, doc sync |
+| **7** | Programmatic Agent Spawning | ✅ Complete | Bridge integration, rate limiter, verifier, orchestrator (50 tools) |
+| **8** | Multi-Provider Architecture | 🔜 Next | Provider abstraction, Claude Code/Codex backends, dashboard |
 
 ---
 
@@ -1210,6 +1212,307 @@ All docs updated to 41-tool state:
 
 ---
 
+## Phase 7: Programmatic Agent Spawning (In Progress)
+
+> **Goal:** Enable `/swarm` to programmatically spawn agents in Antigravity's Agent Manager, using the user's **Google AI Ultra subscription quota** instead of separate API billing.
+
+### Why Agent Manager (Not CLI)
+
+| Approach | Quota Source | Multi-Model | Cost |
+|----------|-------------|-------------|------|
+| **Gemini CLI** (`gemini -p`) | Separate API billing | Gemini only | Pay-per-use |
+| **Claude CLI** (`claude -p`) | Anthropic API billing | Claude only | Pay-per-use |
+| **Agent Manager** (this phase) | AI Ultra subscription | All models (Gemini, Claude, GPT-OSS) | Included |
+
+CLI-based spawning (used by [oh-my-ag](https://github.com/first-fluke/oh-my-ag)) is a valid fallback for pay-as-you-go users, but the primary path for AI Ultra subscribers is spawning within Antigravity.
+
+### Phase Overview
+
+| Step | Name | Status | Effort |
+|------|------|--------|--------|
+| **7A** | Protocol Discovery | ✅ Complete | HAR analysis + research |
+| **7B** | Agent Bridge + Dashboard | ✅ Complete | Extension v5, 48 HTTP routes |
+| **7C** | Shared State Protocol | Pending | Coordination architecture |
+| **7D** | Prompt Templates | Pending | Agent prompt engine |
+| **7E** | Verification and Retry | Pending | Quality gates |
+| **7F** | `/swarm` Integration | Pending | End-to-end wiring |
+
+---
+
+### Phase 7A: Protocol Discovery (✅ Complete)
+
+Captured and analyzed 4 HAR files from Antigravity's DevTools, extracting all ConnectRPC payloads for the `LanguageServerService`.
+
+**Discovered RPC Methods (11):**
+
+| Method | Purpose |
+|--------|---------|
+| `StartCascade` | Create agent session → returns `cascadeId` |
+| `SendUserCascadeMessage` | Send prompt with config (model, agenticMode, autoExecution) |
+| `HandleCascadeUserInteraction` | Respond to agent requests (2 types below) |
+| `StreamAgentStateUpdates` | Real-time agent state via persistent gRPC stream |
+| `DeleteCascadeTrajectory` | Delete a conversation |
+| `UpdateConversationAnnotations` | Update conversation metadata |
+| `AddTrackedWorkspace` | Register workspace |
+| `GetAgentScripts` / `GetAllSkills` / `GetAllWorkflows` / `ListMcpPrompts` | Config & capability queries |
+
+**Interaction Types in `HandleCascadeUserInteraction`:**
+
+| Type | Fields | Maps To |
+|------|--------|---------|
+| `runCommand` | `confirm`, `proposedCommandLine`, `submittedCommandLine` | "Accept command" button |
+| `filePermission` | `allow`, `scope` (PERMISSION_SCOPE_CONVERSATION), `absolutePathUri` | "Allow This Conversation" button |
+
+**Key Config Values:**
+
+| Field | Value | Meaning |
+|-------|-------|---------|
+| `agenticMode` | `true` | Agent mode vs chat-only |
+| `autoExecutionPolicy` | `CASCADE_COMMANDS_AUTO_EXECUTION_EAGER` | Auto-approve commands |
+| `artifactReviewMode` | `ARTIFACT_REVIEW_MODE_TURBO` | Auto-approve file writes |
+| `model` | `MODEL_PLACEHOLDER_M26` | Model selector |
+
+**VS Code Commands:** 184 matching `antigravity.*` (rebranded from `geminicodeassist.*`)
+
+**Reference:** [antigravity_agent_manager_research.md](../antigravity_agent_manager_research.md)
+
+---
+
+### Phase 7B: Agent Bridge + Dashboard (✅ Complete)
+
+**Antigravity Agent Bridge** v0.0.5 — HTTP bridge extension with webview dashboard.
+
+#### Architecture
+
+```
+MCP Server (spawn_agent tool)
+    → HTTP POST http://127.0.0.1:9090/spawn { prompt, newConversation: true }
+        → Bridge Extension (HTTP server in extension host)
+            → vscode.commands.executeCommand('antigravity.sendPromptToAgentPanel', prompt, options)
+    ← HTTP 200 { status: 'dispatched' }
+
+Async variant:
+    → POST /spawn-async { prompt, timeout }
+        → Injects drop-box directive into prompt
+        → FileSystemWatcher waits for agent_{taskId}.out
+    ← HTTP 200 { status: 'complete', output: '...' } (or 504 timeout)
+```
+
+#### Confirmed Working Commands
+
+| Command | Args | Behavior |
+|---------|------|---------|
+| `antigravity.sendPromptToAgentPanel` | `(prompt, { newConversation: true })` | Creates new chat + sends prompt |
+| `antigravity.sendPromptToAgentPanel` | `(prompt, { agentManager: true })` | Routes to active chat |
+| `antigravity.startNewConversation` | none | Opens fresh conversation |
+| `antigravity.openAgent` | `{ prompt }` | Opens agent with prompt |
+
+#### HTTP Routes (48 total)
+
+| Category | Count | Key Endpoints |
+|----------|-------|---------------|
+| Agent Spawning | 3 | `/spawn`, `/spawn-async`, `/spawns` |
+| Conversation | 5 | `/conversation/new`, `/continue`, `/switch`, `/picker`, `/track` |
+| Panel Control | 5 | `/panel/open`, `/focus`, `/reload`, `/toggle`, `/agent/open` |
+| Diff Review | 11 | `/diff/accept-all`, `/reject-hunk`, `/next-file`, `/review`, etc. |
+| MCP | 4 | `/mcp/auth-token`, `/devtools-url`, `/browser-port`, `/config` |
+| Diagnostics | 5 | `/diagnostics`, `/manager-trace`, `/workbench-trace`, `/lint-errors` |
+| Terminal | 3 | `/terminal/read`, `/show`, `/send` |
+| Git | 2 | `/git/commit-msg`, `/explain-problem` |
+| Discovery | 3 | `/commands`, `/commands/all`, `/probe` |
+| System | 2 | `/system/reload`, `/system/restart-ls` |
+
+#### Dashboard (Webview Panel)
+
+Clicking the status bar icon opens a dark-themed dashboard with:
+- Live bridge health (port, uptime, active spawns)
+- Action buttons for all command categories
+- Scrollable activity log with timestamps
+- Auto-refresh every 5 seconds
+
+#### Deliverables
+
+- [x] HTTP bridge server on port 9090
+- [x] 48 REST routes covering all discovered commands
+- [x] Webview dashboard with live status + action buttons
+- [x] Status bar indicator with click-to-open
+- [x] Deployed to `~/.antigravity/extensions/test-agent-spawn-0.0.5/`
+
+---
+
+### Phase 7C: Shared State Protocol (Adopted from oh-my-ag)
+
+Each spawned agent communicates through file-based state, inspired by oh-my-ag's Serena Memory pattern:
+
+| File | Owner | Purpose |
+|------|-------|---------|
+| `task-board.md` | Orchestrator | Central task tracker with priorities |
+| `progress-{agent}.md` | Subagent | Progress updates every 3-5 turns |
+| `result-{agent}.md` | Subagent | Final deliverables + acceptance criteria |
+| `orchestrator-session.md` | Orchestrator | Session metadata, timing, status |
+
+#### Integration with Existing Storage
+
+These files plug into the `StorageAdapter` interface:
+
+- **SQLite mode:** Progress/result files map to new `agent_progress` and `agent_results` tables
+- **File mode:** Written to `swarm-docs/` directory (existing dual-write location)
+- **Qdrant:** Completed results auto-indexed for cross-project retrieval
+
+#### Deliverables
+
+- [ ] Define file schemas (progress format, result format, task-board format)
+- [ ] Add `StorageAdapter` methods: `writeProgress()`, `writeResult()`, `getTaskBoard()`
+- [ ] SQLite schema migration for progress/result tables
+- [ ] Auto-index completed results to Qdrant
+
+---
+
+### Phase 7D: Subagent Prompt Templates (Adopted from oh-my-ag)
+
+Structured, templated prompts for each spawned subagent:
+
+```
+You are a {AGENT_ROLE} working as part of an automated multi-agent system.
+
+## Your Expertise
+{AGENT_SKILL_CONTENT}
+
+## Assigned Task
+**Task ID**: {TASK_ID}  **Priority**: {TASK_PRIORITY}
+{TASK_DESCRIPTION}
+
+### Acceptance Criteria
+{ACCEPTANCE_CRITERIA}
+
+## Turn Limit
+You have a maximum of {MAX_TURNS} turns.
+
+## Shared State Protocol
+- On start: Read task-board.md, create progress-{AGENT_ID}.md
+- Every 3-5 turns: Update progress file
+- On completion: Write result-{AGENT_ID}.md
+```
+
+#### Turn Limits
+
+| Agent Type | Max Turns | Rationale |
+|-----------|-----------|-----------|
+| Implementation (Dev) | 20 | Complex code changes |
+| Review (QA, Code Review) | 15 | Thorough but bounded |
+| Planning (PM, Architect) | 10 | High-level reasoning |
+
+#### Deliverables
+
+- [ ] Template engine in MCP server (`getPopulatedPrompt()`)
+- [ ] Templates for all 9 agent roles
+- [ ] Turn limit configuration in `model_fallback.json`
+- [ ] Update `get_agent_prompt` tool to use templates
+
+---
+
+### Phase 7E: Verification and Retry (Adopted from oh-my-ag)
+
+#### Verification Gates
+
+After each agent completes, run automated verification before accepting:
+
+```
+Agent marks complete
+    -> Run verification (tests, type check, lint)
+    -> PASS -> Accept result, move task to Done
+    -> FAIL -> Enter retry logic
+```
+
+#### Retry Logic
+
+| Attempt | Wait | Strategy |
+|---------|------|----------|
+| 1st retry | 30s | Re-spawn with error context |
+| 2nd retry | 60s | Add "try a different approach" |
+| Final failure | n/a | Escalate to user, flag as BLOCKED |
+
+#### Deliverables
+
+- [ ] Verification script per agent type (test, lint, type check)
+- [ ] Retry logic in orchestrator with error context injection
+- [ ] Status tracking in manifest/SQLite
+
+---
+
+### Phase 7F: `/swarm` Integration
+
+Wire everything together:
+
+```
+User: /swarm Fix the login timeout bug
+    -> PM agent decomposes task -> spec.md
+    ## Phase 8: Multi-Provider Architecture (Next)
+
+Decouple the orchestrator from Antigravity so agents can spawn across multiple backends simultaneously. Full architecture: [`docs/MULTI_PROVIDER_ARCHITECTURE.md`](./MULTI_PROVIDER_ARCHITECTURE.md).
+
+### Problem
+
+1. **Model selection is global** in Antigravity — can't run Claude and Gemini agents simultaneously
+2. **IDE lock-in** — system only works inside Antigravity
+3. **Single point of failure** — Bridge down = no spawning
+
+### Solution: Provider Registry
+
+```
+MCP Server (brain)
+  └── ProviderRegistry
+        ├── AntigravityProvider (:9090) → Gemini       ← Default, implemented
+        ├── ClaudeCodeProvider (CLI)    → Claude       ← Phase 8B
+        ├── CodexProvider (CLI)         → OpenAI       ← Phase 8D
+        └── HeadlessProvider (HTTP)     → vLLM/Ollama  ← Phase 8D
+```
+
+### Implementation Phases
+
+| Sub-Phase | Scope | Status |
+|-----------|-------|--------|
+| **8A** | Extract `AgentProvider` interface, create `ProviderRegistry`, refactor `BridgeClient` → `AntigravityProvider` | 🔄 Now |
+| **8B** | `ClaudeCodeProvider` via `claude --print` CLI | 📋 Planned |
+| **8C** | Configuration dashboard (VS Code webview + standalone web UI) | 📋 Planned |
+| **8D** | Codex, oh-my-ag, headless providers + community SDK | 📋 Planned |
+
+### Configuration
+
+Unified `providers.json` works in both VS Code extension and standalone modes:
+
+```json
+{
+  "providers": {
+    "antigravity": { "enabled": true, "type": "http", "endpoint": "http://127.0.0.1:9090" },
+    "claude-code": { "enabled": true, "type": "cli", "command": "claude" },
+    "codex": { "enabled": false, "type": "cli", "command": "codex" }
+  },
+  "routing": { "strategy": "cost-optimized", "fallbackChain": ["antigravity", "claude-code"] },
+  "rateLimits": { "globalMaxConcurrent": 5, "globalMaxPerHour": 50 }
+}
+```
+
+Per-workspace overrides via `.agent/providers.json` in workspace root.
+
+### Deployment Modes
+
+| Mode | How | Best For |
+|------|-----|----------|
+| **VS Code Extension** | Extension settings + webview dashboard | Single developer |
+| **Standalone Server** | Node.js process + `providers.json` | CI/CD, headless, teams |
+| **Hybrid** | VS Code for PM, standalone for workers | Mixed fleet |
+
+### Key Design Decisions
+
+1. **Providers are runtime plugins**, not build dependencies
+2. **Rate limiting is per-provider AND global**
+3. **Backward compatible** — `spawn_agent` without `provider` uses default
+4. **MCP server is the brain** — providers are dumb execution backends
+5. **Configuration hierarchy** — global defaults → per-provider → per-workspace
+
+---
+
 ## Future Phases
 
 ### Cockpit Extension Enhancements
@@ -1217,6 +1520,44 @@ All docs updated to 41-tool state:
 - Cockpit watches `swarm_status.json` and surfaces notifications
 - Quota-aware auto-routing without user input
 - Visual swarm dashboard in cockpit webview
+
+### Custom Agent Marketplace
+
+- Community-contributed agent roles
+- Domain-specific presets (ML, DevOps, frontend, data engineering)
+- Agent prompt versioning and testing
+- Community provider SDK for custom backends
+
+---
+
+### oh-my-ag Pattern Reference
+
+Full analysis saved at project root.
+
+| Adopted Pattern | oh-my-ag Source | Our Implementation |
+|----------------|--------|-------------------|
+| CLI vendor abstraction | `cli-config.yaml` | Fallback mode in `model_fallback.json` |
+| Shared memory protocol | Serena Memory | `StorageAdapter` + progress/result files |
+| Subagent prompt templates | `subagent-prompt-template.md` | `get_agent_prompt` MCP tool |
+| Verification gates | `oh-my-ag verify` | Per-agent-type verification scripts |
+| Retry logic | Orchestrator SKILL.md | Retry handler (2 attempts + escalate) |
+| Session management | `orchestrator-session.md` | `swarm_status.json` + SQLite |
+
+---
+
+## Future Phases
+
+### Cockpit Extension Enhancements
+
+- Cockpit watches `swarm_status.json` and surfaces notifications
+- Quota-aware auto-routing without user input
+- Visual swarm dashboard in cockpit webview
+
+### CLI Fallback Mode
+
+- For pay-as-you-go users: spawn agents via `gemini`/`claude`/`codex`/`qwen` CLI
+- Vendor abstraction layer (inspired by oh-my-ag `cli-config.yaml`)
+- Same shared state protocol, different spawn mechanism
 
 ### Custom Agent Marketplace
 

@@ -1,0 +1,36 @@
+{
+  "name": "test-agent-spawn",
+  "displayName": "Test Agent Spawn",
+  "description": "Minimal extension to test geminicodeassist agent spawning commands",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "activationEvents": [
+    "onCommand:testAgentSpawn.run",
+    "onCommand:testAgentSpawn.startAgent",
+    "onCommand:testAgentSpawn.newChat",
+    "onCommand:testAgentSpawn.listCommands"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "testAgentSpawn.run",
+        "title": "Test Agent Spawn: Run All Tests"
+      },
+      {
+        "command": "testAgentSpawn.startAgent",
+        "title": "Test Agent Spawn: Start Agent"
+      },
+      {
+        "command": "testAgentSpawn.newChat",
+        "title": "Test Agent Spawn: New Chat"
+      },
+      {
+        "command": "testAgentSpawn.listCommands",
+        "title": "Test Agent Spawn: List Gemini Commands"
+      }
+    ]
+  }
+}
