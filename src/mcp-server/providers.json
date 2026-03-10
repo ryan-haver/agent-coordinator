@@ -1,0 +1,33 @@
+{
+  "providers": {
+    "antigravity": {
+      "enabled": true,
+      "type": "http",
+      "endpoint": "http://127.0.0.1:9090",
+      "priority": 1,
+      "maxConcurrent": 3
+    },
+    "claude-code": {
+      "enabled": false,
+      "type": "cli",
+      "command": "claude",
+      "priority": 2,
+      "maxConcurrent": 2
+    },
+    "codex": {
+      "enabled": false,
+      "type": "cli",
+      "command": "codex",
+      "priority": 3,
+      "maxConcurrent": 2
+    }
+  },
+  "routing": {
+    "strategy": "priority",
+    "fallbackChain": ["antigravity", "claude-code"]
+  },
+  "rateLimits": {
+    "globalMaxConcurrent": 5,
+    "globalMaxPerHour": 50
+  }
+}

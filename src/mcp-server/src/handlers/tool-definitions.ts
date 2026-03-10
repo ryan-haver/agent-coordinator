@@ -616,7 +616,7 @@ export const TOOL_DEFINITIONS = [
     // ── Phase 7C: Agent Bridge Integration ────────────────────────────
     {
         name: "spawn_agent",
-        description: "Spawn a new agent in Antigravity IDE via the Agent Bridge. Generates a prompt from the template, registers the agent in the manifest, and sends it to the bridge for execution.",
+        description: "Spawn a new agent via the best available provider. Selects provider based on model/capability requirements. Generates a prompt from the template, registers the agent in the manifest, and dispatches it for execution.",
         inputSchema: {
             type: "object",
             properties: {
@@ -626,6 +626,7 @@ export const TOOL_DEFINITIONS = [
                 agent_id: { type: "string", description: "Unique agent ID (e.g. α, β, γ)" },
                 phase: { type: "string", description: "Swarm phase number (default: 1)" },
                 model: { type: "string", description: "Model to use (default: auto-routed via get_routing_recommendation)" },
+                provider: { type: "string", description: "Provider name to use (antigravity, claude-code, codex). Auto-selected if omitted." },
                 custom_prompt: { type: "string", description: "Optional: override template with a fully custom prompt" },
                 workspace_root: { type: "string", description: "Optional workspace root override" }
             },
@@ -634,7 +635,7 @@ export const TOOL_DEFINITIONS = [
     },
     {
         name: "get_bridge_status",
-        description: "Check Agent Bridge health, rate limiter stats, active agent watches, and list ongoing conversations.",
+        description: "Check all registered providers (health, active count, models, capabilities), rate limiter stats, active agent watches, and list ongoing conversations.",
         inputSchema: {
             type: "object",
             properties: {}

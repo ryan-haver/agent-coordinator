@@ -25,6 +25,9 @@ export type { RegisteredProvider, ProviderRequirements, ProviderSelection } from
 
 export { AntigravityProvider, getAntigravityProvider } from "./antigravity-provider.js";
 
+export { ClaudeCodeProvider, getClaudeCodeProvider, resetClaudeCodeProvider } from "./claude-code-provider.js";
+export type { ClaudeCodeConfig } from "./claude-code-provider.js";
+
 // Model catalog (dynamic model list from state.vscdb)
 export { ModelCatalog, getModelCatalog, resetModelCatalog, readModelCredits } from "./model-catalog.js";
 export type { ModelEntry, CatalogSnapshot, QuotaBucket } from "./model-catalog.js";
@@ -44,3 +47,7 @@ export type { TemplateContext } from "./template-engine.js";
 // Auto-approver (Phase 7G — programmatic interaction approval)
 export { AutoApprover, getAutoApprover, LanguageServerClient, getLanguageServerClient } from "./auto-approver.js";
 export type { AutoApproverConfig, InteractionApproval, ApprovalResult, LanguageServerConnection } from "./auto-approver.js";
+
+// Provider loader (Phase 8A — config-driven registry bootstrap)
+export { loadProviders, readProvidersConfig, writeProvidersConfig, createProvider } from "./provider-loader.js";
+export type { ProviderConfigEntry, ProvidersConfig } from "./provider-loader.js";

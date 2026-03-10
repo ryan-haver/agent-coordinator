@@ -1,12 +1,14 @@
 /**
  * Spawn handler — spawn_agent, get_bridge_status, stop_agent MCP tools.
  *
- * Bridges the MCP server to the Agent Bridge VS Code extension.
+ * Routes agent spawn requests through the ProviderRegistry, which
+ * selects the best provider based on model, capabilities, and capacity.
  * Combines prompt generation, manifest registration, rate limiting,
- * and bridge HTTP calls into a single orchestrated flow.
+ * and provider dispatch into a single orchestrated flow.
  */
 import { resolveWorkspaceRoot, type ToolResponse } from "./context.js";
 import { getBridgeClient } from "../bridge/client.js";
+import { getProviderRegistry } from "../bridge/registry.js";
 import { getRateLimiter } from "../bridge/rate-limiter.js";
 import { getErrorDetector } from "../bridge/error-detector.js";
 import { getVerifier, Verifier } from "../bridge/verifier.js";
@@ -33,6 +35,7 @@ export async function handleSpawnAgent(args: Record<string, unknown>): Promise<T
     const phase = (args?.phase as string) ?? "1";
     const model = (args?.model as string) ?? "auto";
     const custom_prompt = args?.custom_prompt as string | undefined;
+    const providerName = args?.provider as string | undefined;
 
     if (!role || !mission || !scope || !agent_id) {
         throw new Error("Missing required arguments: role, mission, scope, agent_id");
@@ -90,13 +93,55 @@ export async function handleSpawnAgent(args: Record<string, unknown>): Promise<T
         }
     }
 
-    // 4. Spawn via bridge
-    const client = getBridgeClient();
-    const result = await client.spawn(prompt, {
+    // 4. Select provider and spawn
+    const registry = getProviderRegistry();
+    const selection = registry.selectProvider({
+        provider: providerName,
+        model: model !== "auto" ? model : undefined,
+        capabilities: ["file-edit"],
+    });
+
+    if (!selection) {
+        // Fallback: try direct bridge client if no registry providers available
+        const client = getBridgeClient();
+        const fallbackResult = await client.spawn(prompt, {
+            newConversation: true,
+            background: true,
+            agentManager: true,
+        });
+        if (!fallbackResult.success) {
+            limiter.recordError();
+            return {
+                toolResult: `Spawn failed (fallback): ${fallbackResult.error}`,
+                content: [{ type: "text", text: JSON.stringify({
+                    success: false, agent_id, role,
+                    error: `No provider available. Fallback error: ${fallbackResult.error}`,
+                    stats: limiter.getStats(),
+                }, null, 2) }],
+            };
+        }
+        limiter.recordSpawn();
+        if (fallbackResult.conversationId) {
+            getErrorDetector().watchAgent(agent_id, fallbackResult.conversationId);
+        }
+        return {
+            toolResult: `Agent ${agent_id} spawned (fallback)`,
+            content: [{ type: "text", text: JSON.stringify({
+                success: true, agent_id, role, phase, model,
+                provider: "antigravity (fallback)",
+                conversationId: fallbackResult.conversationId,
+                promptLength: fallbackResult.promptLength,
+                stats: limiter.getStats(),
+            }, null, 2) }],
+        };
+    }
+
+    const result = await selection.provider.spawn(prompt, {
         newConversation: true,
         background: true,
         agentManager: true,
     });
+    const selectedProvider = selection.provider.name;
 
     if (!result.success) {
         limiter.recordError();
@@ -117,13 +162,14 @@ export async function handleSpawnAgent(args: Record<string, unknown>): Promise<T
 
     // 5. Record spawn and start watching
     limiter.recordSpawn();
+    registry.recordSpawn(selectedProvider);
     if (result.conversationId) {
         const detector = getErrorDetector();
         detector.watchAgent(agent_id, result.conversationId);
     }
 
     return {
-        toolResult: `Agent ${agent_id} spawned successfully`,
+        toolResult: `Agent ${agent_id} spawned successfully via ${selectedProvider}`,
         content: [{
             type: "text",
             text: JSON.stringify({
@@ -132,6 +178,8 @@ export async function handleSpawnAgent(args: Record<string, unknown>): Promise<T
                 role,
                 phase,
                 model,
+                provider: selectedProvider,
+                providerReason: selection.reason,
                 conversationId: result.conversationId,
                 promptLength: result.promptLength,
                 stats: limiter.getStats(),
@@ -141,21 +189,43 @@ export async function handleSpawnAgent(args: Record<string, unknown>): Promise<T
 }
 
 /**
- * get_bridge_status — Health check and conversation list.
+ * get_bridge_status — Provider health and agent status.
+ *
+ * Reports all registered providers, their health, and active agent watches.
+ * Backward-compatible: still reports bridge-specific data.
  */
 export async function handleGetBridgeStatus(_args: Record<string, unknown>): Promise<ToolResponse> {
-    const client = getBridgeClient();
-    const health = await client.ping();
+    const registry = getProviderRegistry();
     const limiter = getRateLimiter();
     const detector = getErrorDetector();
 
+    // Health-check all registered providers
+    const healthMap = await registry.pingAll();
+    const providers = registry.listProviders().map(p => ({
+        name: p.name,
+        displayName: p.displayName,
+        enabled: p.enabled,
+        priority: p.priority,
+        online: healthMap.get(p.name)?.online ?? false,
+        latencyMs: healthMap.get(p.name)?.latencyMs ?? -1,
+        activeCount: p.activeCount,
+        maxConcurrent: p.maxConcurrent,
+        models: p.models,
+        capabilities: p.capabilities,
+    }));
+
+    // Backward compat: try to get conversations from bridge
     let conversations: unknown[] = [];
-    if (health.online) {
-        conversations = await client.getConversations();
-    }
+    try {
+        const client = getBridgeClient();
+        const bridgeHealth = await client.ping();
+        if (bridgeHealth.online) {
+            conversations = await client.getConversations();
+        }
+    } catch { /* bridge may not be available */ }
 
     const status = {
-        bridge: health,
+        providers,
         rateLimiter: limiter.getStats(),
         watches: detector.getWatches().map(w => ({
             agentId: w.agentId,
@@ -165,6 +235,7 @@ export async function handleGetBridgeStatus(_args: Record<string, unknown>): Pro
             lastError: w.lastError,
         })),
         conversations,
+        totalActive: registry.getTotalActiveCount(),
     };
 
     return {
@@ -280,16 +351,20 @@ export async function handleRunSwarm(args: Record<string, unknown>): Promise<Too
     orchestrator.updateConfig({ autoVerify, autoRetry });
     const plan = orchestrator.planSummary(manifest);
 
-    // Bridge health check
-    const client = getBridgeClient();
-    const health = await client.ping();
+    // Provider health check
+    const registry = getProviderRegistry();
+    const defaultProvider = registry.getDefault();
+    const health = defaultProvider
+        ? await defaultProvider.ping()
+        : { online: false, latencyMs: -1 };
 
     return {
         toolResult: JSON.stringify(plan),
         content: [{
             type: "text",
             text: JSON.stringify({
-                bridgeOnline: health.online,
+                providerOnline: health.online,
+                provider: defaultProvider?.name ?? "none",
                 config: orchestrator.getConfig(),
                 plan,
                 instructions: plan.totalAgents > 0
@@ -341,11 +416,15 @@ export async function handleExecuteSwarm(args: Record<string, unknown>): Promise
         };
     }
 
-    // Bridge health check
-    const client = getBridgeClient();
-    const health = await client.ping();
+    // Provider health check
+    const registry = getProviderRegistry();
+    const defaultProvider = registry.getDefault();
+    if (!defaultProvider) {
+        throw new Error("No providers registered. Check providers.json or start the Antigravity extension.");
+    }
+    const health = await defaultProvider.ping();
     if (!health.online) {
-        throw new Error("Agent Bridge is offline. Start the Antigravity extension first.");
+        throw new Error(`Provider '${defaultProvider.name}' is offline. Start the provider or enable another.`);
     }
 
     // Start auto-approver if requested
