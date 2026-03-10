@@ -299,3 +299,144 @@ export async function handleRunSwarm(args: Record<string, unknown>): Promise<Too
     };
 }
 
+/**
+ * execute_swarm — Fully automated swarm execution.
+ *
+ * Reads the manifest, spawns agents phase-by-phase, polls for completion,
+ * runs verification, retries failures, and returns a full execution report.
+ */
+export async function handleExecuteSwarm(args: Record<string, unknown>): Promise<ToolResponse> {
+    const wsRoot = resolveWorkspaceRoot(args);
+    const autoVerify = (args?.auto_verify as boolean) ?? true;
+    const autoRetry = (args?.auto_retry as boolean) ?? true;
+    const dryRun = (args?.dry_run as boolean) ?? false;
+
+    // Read manifest
+    const { getStorage } = await import("../storage/singleton.js");
+    const storage = getStorage();
+    const manifest = storage.readManifest(wsRoot);
+
+    if (!manifest || manifest.trim().length === 0) {
+        throw new Error("No swarm manifest found. Create one first with create_swarm_manifest.");
+    }
+
+    const orchestrator = getOrchestrator();
+    orchestrator.updateConfig({ autoVerify, autoRetry });
+
+    // Dry run — return plan only
+    if (dryRun) {
+        const plan = orchestrator.planSummary(manifest);
+        return {
+            toolResult: JSON.stringify(plan),
+            content: [{
+                type: "text",
+                text: JSON.stringify({
+                    dryRun: true,
+                    config: orchestrator.getConfig(),
+                    plan,
+                }, null, 2),
+            }],
+        };
+    }
+
+    // Bridge health check
+    const client = getBridgeClient();
+    const health = await client.ping();
+    if (!health.online) {
+        throw new Error("Agent Bridge is offline. Start the Antigravity extension first.");
+    }
+
+    // Execute with callbacks that wire into existing handlers
+    const result = await orchestrator.execute(manifest, {
+        spawnAgent: async (agent) => {
+            await handleSpawnAgent({
+                role: agent.role,
+                mission: `Execute assigned scope: ${agent.scope}`,
+                scope: agent.scope,
+                agent_id: agent.id,
+                phase: "1", // Phase is embedded in manifest
+                model: agent.model,
+                workspace_root: wsRoot,
+            });
+        },
+        retryAgent: async (agent, retryContext, attempt) => {
+            await handleSpawnAgent({
+                role: agent.role,
+                mission: `RETRY (attempt ${attempt}): ${agent.scope}`,
+                scope: agent.scope,
+                agent_id: `${agent.id}-retry-${attempt}`,
+                model: agent.model,
+                custom_prompt: retryContext,
+                workspace_root: wsRoot,
+            });
+        },
+    });
+
+    return {
+        toolResult: JSON.stringify(result),
+        content: [{
+            type: "text",
+            text: JSON.stringify({
+                success: result.success,
+                totalAgents: result.totalAgents,
+                completedAgents: result.completedAgents,
+                failedAgents: result.failedAgents,
+                totalDurationMs: result.totalDurationMs,
+                phases: result.phases.map(p => ({
+                    phase: p.phase,
+                    allPassed: p.allPassed,
+                    durationMs: p.durationMs,
+                    agents: p.agents.map(a => ({
+                        agentId: a.agentId,
+                        status: a.status,
+                        attempt: a.attempt,
+                        error: a.error,
+                    })),
+                })),
+            }, null, 2),
+        }],
+    };
+}
+
+/**
+ * retry_agent — Re-spawn an agent with error context prepended.
+ */
+export async function handleRetryAgent(args: Record<string, unknown>): Promise<ToolResponse> {
+    const agent_id = args?.agent_id as string;
+    const error_context = args?.error_context as string;
+    if (!agent_id) throw new Error("Missing required argument: agent_id");
+
+    const wsRoot = resolveWorkspaceRoot(args);
+
+    // Look up original agent from storage
+    const { getStorage } = await import("../storage/singleton.js");
+    const storage = getStorage();
+    const agent = storage.getAgent(wsRoot, agent_id);
+    if (!agent) throw new Error(`Agent ${agent_id} not found in manifest`);
+
+    // Build retry prompt
+    let retryPrompt = error_context ?? "";
+    if (!retryPrompt) {
+        // Auto-generate from verification
+        const verifier = getVerifier();
+        const verification = await verifier.verify(wsRoot);
+        if (!verification.passed) {
+            const { Verifier: V } = await import("../bridge/verifier.js");
+            retryPrompt = V.buildRetryContext(verification);
+        }
+    }
+
+    // Re-spawn with retry context
+    const attempt = (args?.attempt as number) ?? 2;
+    const result = await handleSpawnAgent({
+        role: agent.role,
+        mission: `RETRY (attempt ${attempt}): Fix verification failures and complete assigned scope`,
+        scope: agent.scope,
+        agent_id: `${agent_id}-retry-${attempt}`,
+        model: agent.model,
+        custom_prompt: retryPrompt,
+        workspace_root: wsRoot,
+    });
+
+    return result;
+}

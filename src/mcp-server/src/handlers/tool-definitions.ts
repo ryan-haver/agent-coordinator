@@ -679,6 +679,34 @@ export const TOOL_DEFINITIONS = [
             }
         }
     },
+    // ── Phase 7E/7F: Automated Swarm Execution ────────────────────────
+    {
+        name: "execute_swarm",
+        description: "Fully automated swarm execution. Reads the manifest, spawns agents phase-by-phase, polls for completion, runs verification, retries failures, and returns a full execution report. Use dry_run=true to preview the plan without spawning.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                auto_verify: { type: "boolean", description: "Run verification after each phase (default: true)" },
+                auto_retry: { type: "boolean", description: "Auto-retry failed agents up to max_retries (default: true)" },
+                dry_run: { type: "boolean", description: "Preview execution plan without spawning agents (default: false)" },
+                workspace_root: { type: "string", description: "Optional workspace root override" }
+            }
+        }
+    },
+    {
+        name: "retry_agent",
+        description: "Re-spawn a failed agent with error context injected into the prompt. Looks up the original agent from the manifest and spawns a new instance with verification failure details prepended.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                agent_id: { type: "string", description: "ID of the agent to retry" },
+                error_context: { type: "string", description: "Error context to inject (auto-generated from verification if omitted)" },
+                attempt: { type: "number", description: "Attempt number (default: 2)" },
+                workspace_root: { type: "string", description: "Optional workspace root override" }
+            },
+            required: ["agent_id"]
+        }
+    },
     // ── Phase 8A: Model Catalog Sync ─────────────────────────────────
     {
         name: "sync_model_catalog",

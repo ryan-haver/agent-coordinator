@@ -58,7 +58,7 @@ Sourced from [Antigravity Cockpit](https://github.com/jlcodes99/vscode-antigravi
 | **5C** | TimescaleDB — Telemetry & Logs | ✅ Complete | Dual-write pipeline, agent_events, model_performance |
 | **5D** | Documentation | ✅ Complete | Tool reference, architecture, operations, developer guide |
 | **6** | Temporal RAG & CI | ✅ Complete | 2 new analytical tools (41 total), CI pipeline, doc sync |
-| **7** | Programmatic Agent Spawning | ✅ Complete | Bridge integration, rate limiter, verifier, orchestrator (50 tools) |
+| **7** | Programmatic Agent Spawning | 🔄 In Progress | Bridge integration (7A–7B ✅), shared state, templates, auto-approver pending |
 | **8** | Multi-Provider Architecture | 🔜 Next | Provider abstraction, Claude Code/Codex backends, dashboard |
 
 ---

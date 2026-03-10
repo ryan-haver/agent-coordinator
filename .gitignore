@@ -14,3 +14,8 @@ quota_snapshot.json
 swarm-agent-*.json
 swarm-manifest.md.bak
 swarm-docs/
+
+# Sensitive / debug artifacts
+devtools_har_files/
+test-agent-spawn/
+.antigravity-extensions/

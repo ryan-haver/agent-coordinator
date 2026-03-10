@@ -14,7 +14,7 @@ export { Verifier, getVerifier } from "./verifier.js";
 export type { VerificationCheck, CheckResult, VerificationResult } from "./verifier.js";
 
 export { Orchestrator, getOrchestrator, parseManifestPhases, buildExecutionPlan } from "./orchestrator.js";
-export type { OrchestratorConfig, PhaseResult, AgentResult, SwarmExecutionResult } from "./orchestrator.js";
+export type { OrchestratorConfig, PhaseResult, AgentResult, SwarmExecutionResult, ExecutionCallbacks } from "./orchestrator.js";
 
 // Provider abstraction layer (Phase 8A)
 export type { AgentProvider, ProviderConfig, ProviderHealth, AgentStatus, SessionInfo } from "./provider.js";
@@ -32,3 +32,11 @@ export type { ModelEntry, CatalogSnapshot, QuotaBucket } from "./model-catalog.j
 // Quota monitor (bucket-aware quota tracking and pivot recommendations)
 export { QuotaMonitor, getQuotaMonitor, resetQuotaMonitor } from "./quota-monitor.js";
 export type { QuotaSnapshot, BucketQuota, PivotRecommendation } from "./quota-monitor.js";
+
+// Task board (shared state aggregation for orchestrator)
+export { TaskBoard, getTaskBoard, buildTaskBoard } from "./task-board.js";
+export type { TaskBoardSnapshot, PhaseStatus, TaskBoardEntry } from "./task-board.js";
+
+// Template engine (prompt variable interpolation)
+export { getPopulatedPrompt, interpolate, buildVariableMap, getTurnLimit, listAvailableRoles } from "./template-engine.js";
+export type { TemplateContext } from "./template-engine.js";

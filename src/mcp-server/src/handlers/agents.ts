@@ -279,39 +279,23 @@ export async function handleGetAgentPrompt(args: Record<string, unknown>): Promi
     const agent_id = args?.agent_id as string;
     if (!role || !mission || !scope || !agent_id) throw new Error("Missing required arguments: role, mission, scope, agent_id");
 
-    if (!/^[a-z0-9-]+$/i.test(role)) throw new Error(`Invalid role name: ${role}`);
+    const { getPopulatedPrompt } = await import("../bridge/template-engine.js");
+    const configDir = getGlobalConfigPath();
+    const wsRoot = resolveWorkspaceRoot(args);
 
-    const promptPath = path.join(getGlobalConfigPath(), "templates", "agent-prompts", `${role}.md`);
-    if (!fs.existsSync(promptPath)) throw new Error(`Prompt template for ${role} not found`);
-
-    let prompt = fs.readFileSync(promptPath, "utf8");
-    prompt = prompt.split("$MISSION").join(mission);
-    prompt = prompt.split("$SCOPE").join(scope);
-    prompt = prompt.split("$AGENT_ID").join(agent_id);
-    prompt = prompt.split("$WORKSPACE_ROOT").join(resolveWorkspaceRoot(args));
-
-    // Phase 7D: Enhanced template variables
-    const acceptance_criteria = (args?.acceptance_criteria as string) ?? "Complete all assigned work, ensure build passes, all tests pass.";
-    prompt = prompt.split("$ACCEPTANCE_CRITERIA").join(acceptance_criteria);
-
-    const turn_limit = (args?.turn_limit as string) ?? "50";
-    prompt = prompt.split("$TURN_LIMIT").join(turn_limit);
-
-    const context = (args?.context as string) ?? "";
-    prompt = prompt.split("$CONTEXT").join(context);
-
-    let fbProfile = "";
-    const fbAccountsPath = path.join(getGlobalConfigPath(), "fusebase_accounts.json");
-    if (fs.existsSync(fbAccountsPath)) {
-        try {
-            const fbConfig = JSON.parse(fs.readFileSync(fbAccountsPath, "utf8"));
-            const profileEntry = fbConfig?.fusebase_profiles?.[role];
-            if (profileEntry?.profile) {
-                fbProfile = profileEntry.profile;
-            }
-        } catch { /* ignore parse errors */ }
-    }
-    prompt = prompt.split("$PROFILE").join(fbProfile);
+    const prompt = getPopulatedPrompt({
+        role,
+        agentId: agent_id,
+        mission,
+        scope,
+        workspaceRoot: wsRoot,
+        acceptanceCriteria: args?.acceptance_criteria as string | undefined,
+        turnLimit: args?.turn_limit as string | undefined,
+        context: args?.context as string | undefined,
+        taskId: args?.task_id as string | undefined,
+        taskPriority: args?.task_priority as string | undefined,
+        taskDescription: args?.task_description as string | undefined,
+    }, configDir);
 
     return { toolResult: prompt, content: [{ type: "text", text: prompt }] };
 }
