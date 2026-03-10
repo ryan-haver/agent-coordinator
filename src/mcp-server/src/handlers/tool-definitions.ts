@@ -678,5 +678,16 @@ export const TOOL_DEFINITIONS = [
                 workspace_root: { type: "string", description: "Optional workspace root override" }
             }
         }
+    },
+    // ── Phase 8A: Model Catalog Sync ─────────────────────────────────
+    {
+        name: "sync_model_catalog",
+        description: "Read the live model list from Antigravity's state database, diff against model_fallback.json, and optionally update the static config. Use to verify model freshness.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                update_fallback: { type: "boolean", description: "If true, update model_fallback.json available_models to match live state (default: false)" }
+            }
+        }
     }
 ];

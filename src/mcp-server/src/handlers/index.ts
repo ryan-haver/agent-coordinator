@@ -52,6 +52,9 @@ import { handleStoreMemory, handleSemanticSearch, handleFindSimilarCode, handleF
 // Bridge handlers (agent spawn via Agent Bridge extension)
 import { handleSpawnAgent, handleGetBridgeStatus, handleStopAgent, handleVerifyAgentWork, handleRunSwarm } from "./spawn.js";
 
+// Model catalog handler
+import { handleSyncModelCatalog } from "./catalog.js";
+
 /**
  * Master tool handler map: tool name → handler function.
  * The index.ts router uses this to dispatch tool calls.
@@ -138,4 +141,7 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
     stop_agent: handleStopAgent,
     verify_agent_work: handleVerifyAgentWork,
     run_swarm: handleRunSwarm,
+
+    // Model Catalog
+    sync_model_catalog: handleSyncModelCatalog,
 };

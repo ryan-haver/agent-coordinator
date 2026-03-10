@@ -20,26 +20,25 @@ import type {
     SessionInfo,
 } from "./provider.js";
 import { getBridgeClient } from "./client.js";
+import { getModelCatalog } from "./model-catalog.js";
 
 export class AntigravityProvider implements AgentProvider {
     readonly name = "antigravity";
     readonly displayName = "Antigravity IDE";
-    readonly models = [
-        "gemini-3-pro-high",
-        "gemini-3-pro-low",
-        "gemini-3-flash",
-        "gemini-3-pro-image",
-        "claude-sonnet-4.5",
-        "claude-sonnet-4.5-thinking",
-        "claude-opus-4.5-thinking",
-        "gpt-oss-120b-medium",
-    ];
+
+    /** Dynamic model list — reads live from state.vscdb via ModelCatalog */
+    get models(): string[] {
+        return getModelCatalog().getModelLabels();
+    }
+
     readonly capabilities = ["file-edit", "terminal", "browser", "mcp", "git"];
 
     async ping(): Promise<ProviderHealth> {
         const client = getBridgeClient();
         const start = Date.now();
         const result = await client.ping();
+        // Refresh catalog on ping so models stay fresh
+        getModelCatalog().invalidate();
         return {
             online: result.online,
             latencyMs: Date.now() - start,

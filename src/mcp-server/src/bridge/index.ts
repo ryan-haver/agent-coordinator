@@ -24,3 +24,7 @@ export { ProviderRegistry, getProviderRegistry, resetProviderRegistry } from "./
 export type { RegisteredProvider, ProviderRequirements, ProviderSelection } from "./registry.js";
 
 export { AntigravityProvider, getAntigravityProvider } from "./antigravity-provider.js";
+
+// Model catalog (dynamic model list from state.vscdb)
+export { ModelCatalog, getModelCatalog, resetModelCatalog } from "./model-catalog.js";
+export type { ModelEntry, CatalogSnapshot } from "./model-catalog.js";
