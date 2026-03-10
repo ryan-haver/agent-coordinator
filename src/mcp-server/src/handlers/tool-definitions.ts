@@ -612,5 +612,71 @@ export const TOOL_DEFINITIONS = [
             },
             required: ["message"]
         }
+    },
+    // ── Phase 7C: Agent Bridge Integration ────────────────────────────
+    {
+        name: "spawn_agent",
+        description: "Spawn a new agent in Antigravity IDE via the Agent Bridge. Generates a prompt from the template, registers the agent in the manifest, and sends it to the bridge for execution.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                role: { type: "string", description: "Agent role template (developer, qa, architect, debugger, devops, explorer, researcher, code-reviewer, project-manager)" },
+                mission: { type: "string", description: "What the agent should accomplish" },
+                scope: { type: "string", description: "Files/directories the agent should work on" },
+                agent_id: { type: "string", description: "Unique agent ID (e.g. α, β, γ)" },
+                phase: { type: "string", description: "Swarm phase number (default: 1)" },
+                model: { type: "string", description: "Model to use (default: auto-routed via get_routing_recommendation)" },
+                custom_prompt: { type: "string", description: "Optional: override template with a fully custom prompt" },
+                workspace_root: { type: "string", description: "Optional workspace root override" }
+            },
+            required: ["role", "mission", "scope", "agent_id"]
+        }
+    },
+    {
+        name: "get_bridge_status",
+        description: "Check Agent Bridge health, rate limiter stats, active agent watches, and list ongoing conversations.",
+        inputSchema: {
+            type: "object",
+            properties: {}
+        }
+    },
+    {
+        name: "stop_agent",
+        description: "Stop a running agent by unwatching it and decrementing the active count. Use mark_agent_failed for recording the failure in the manifest.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                agent_id: { type: "string", description: "Agent ID to stop" },
+                reason: { type: "string", description: "Why the agent is being stopped" }
+            },
+            required: ["agent_id"]
+        }
+    },
+    // ── Phase 7E: Verification Gates ──────────────────────────────────
+    {
+        name: "verify_agent_work",
+        description: "Run verification checks (build, type-check, test) on an agent's completed work. Returns structured pass/fail results.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                agent_id: { type: "string", description: "Agent whose work to verify" },
+                checks: { type: "array", items: { type: "string" }, description: "Optional: specific check names to run (default: all)" },
+                workspace_root: { type: "string", description: "Optional workspace root override" }
+            },
+            required: ["agent_id"]
+        }
+    },
+    // ── Phase 7F: Swarm Orchestration ─────────────────────────────────
+    {
+        name: "run_swarm",
+        description: "Preview a fully automated swarm execution plan. Parses the manifest, extracts phases and agents, and returns a structured execution plan. Use spawn_agent to execute individual agents.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                auto_verify: { type: "boolean", description: "Run verification after each agent completes (default: true)" },
+                auto_retry: { type: "boolean", description: "Auto-retry failed agents (default: true)" },
+                workspace_root: { type: "string", description: "Optional workspace root override" }
+            }
+        }
     }
 ];

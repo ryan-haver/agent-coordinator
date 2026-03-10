@@ -49,6 +49,9 @@ import { handleGetMyTelemetry, handleGetSessionTelemetry, handleGetSlowOperation
 // Memory handlers (semantic search — soft dependency on Qdrant)
 import { handleStoreMemory, handleSemanticSearch, handleFindSimilarCode, handleFindPastSolutions } from "./memory.js";
 
+// Bridge handlers (agent spawn via Agent Bridge extension)
+import { handleSpawnAgent, handleGetBridgeStatus, handleStopAgent, handleVerifyAgentWork, handleRunSwarm } from "./spawn.js";
+
 /**
  * Master tool handler map: tool name → handler function.
  * The index.ts router uses this to dispatch tool calls.
@@ -128,4 +131,11 @@ export const TOOL_HANDLERS: Record<string, ToolHandler> = {
     semantic_search: handleSemanticSearch,
     find_similar_code: handleFindSimilarCode,
     find_past_solutions: handleFindPastSolutions,
+
+    // Bridge (Agent Spawn via Agent Bridge extension)
+    spawn_agent: handleSpawnAgent,
+    get_bridge_status: handleGetBridgeStatus,
+    stop_agent: handleStopAgent,
+    verify_agent_work: handleVerifyAgentWork,
+    run_swarm: handleRunSwarm,
 };

@@ -290,6 +290,16 @@ export async function handleGetAgentPrompt(args: Record<string, unknown>): Promi
     prompt = prompt.split("$AGENT_ID").join(agent_id);
     prompt = prompt.split("$WORKSPACE_ROOT").join(resolveWorkspaceRoot(args));
 
+    // Phase 7D: Enhanced template variables
+    const acceptance_criteria = (args?.acceptance_criteria as string) ?? "Complete all assigned work, ensure build passes, all tests pass.";
+    prompt = prompt.split("$ACCEPTANCE_CRITERIA").join(acceptance_criteria);
+
+    const turn_limit = (args?.turn_limit as string) ?? "50";
+    prompt = prompt.split("$TURN_LIMIT").join(turn_limit);
+
+    const context = (args?.context as string) ?? "";
+    prompt = prompt.split("$CONTEXT").join(context);
+
     let fbProfile = "";
     const fbAccountsPath = path.join(getGlobalConfigPath(), "fusebase_accounts.json");
     if (fs.existsSync(fbAccountsPath)) {
