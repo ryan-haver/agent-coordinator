@@ -8,15 +8,16 @@
  *   1. LanguageServerClient — connects to the Language Server via HTTPS+CSRF
  *   2. AutoApprover — polls for pending interactions and approves them
  *
- * The Language Server connection uses the same pattern as quota_check.ps1:
- *   - Find language_server_windows_x64.exe via WMI
+ * Process discovery is cross-platform (Windows, macOS, Linux):
+ *   - Find the language_server executable via platform-aware process listing
  *   - Extract CSRF token from command line args
- *   - Find listening port via Get-NetTCPConnection
+ *   - Find listening port via netstat/lsof/ss
  *   - POST to https://127.0.0.1:{PORT}/exa.language_server_pb.LanguageServerService/{METHOD}
  */
 
 import { exec } from "child_process";
 import { promisify } from "util";
+import { platform } from "os";
 
 const execAsync = promisify(exec);
 
@@ -67,6 +68,16 @@ const DEFAULT_CONFIG: AutoApproverConfig = {
     maxCascades: 20,
 };
 
+/** Map platform to the expected language server binary name */
+function getLanguageServerBinaryName(): string {
+    switch (platform()) {
+        case "win32": return "language_server_windows_x64.exe";
+        case "darwin": return "language_server_macos_x64";
+        case "linux": return "language_server_linux_x64";
+        default: return "language_server";
+    }
+}
+
 // ────────────────────────────────────────────────────────────────────────
 // LanguageServerClient — direct HTTPS+CSRF connection
 // ────────────────────────────────────────────────────────────────────────
@@ -76,45 +87,113 @@ export class LanguageServerClient {
 
     /**
      * Discover and connect to the Language Server.
-     * Extracts CSRF token and port from the running process.
+     * Uses platform-aware process discovery — no PowerShell dependency.
      */
     async connect(): Promise<LanguageServerConnection> {
         if (this.connection) return this.connection;
 
-        // Use PowerShell to find the language server process (same as quota_check.ps1)
-        const script = `
-            $proc = Get-CimInstance Win32_Process -Filter "name='language_server_windows_x64.exe'" | 
-                Where-Object { $_.CommandLine -match '--csrf_token' -and $_.CommandLine -match '--app_data_dir\\s+antigravity' } |
-                Select-Object -First 1
-            if (-not $proc) { throw "Language server not found" }
-            $cmd = $proc.CommandLine
-            if ($cmd -match '--csrf_token[=\\s]+([a-f0-9-]+)') { $csrf = $matches[1] } else { throw "CSRF not found" }
-            $ports = Get-NetTCPConnection -State Listen -OwningProcess $proc.ProcessId -ErrorAction SilentlyContinue | 
-                Select-Object -ExpandProperty LocalPort | Sort-Object -Unique
-            if (-not $ports) { throw "No ports found" }
-            $port = if ($ports -is [System.Array]) { $ports[0] } else { $ports }
-            Write-Output "$($proc.ProcessId)|$csrf|$port"
-        `;
+        const os = platform();
+        const binaryName = getLanguageServerBinaryName();
 
+        // Step 1: Find the language server process and its command line
+        let procOutput: string;
         try {
-            const { stdout } = await execAsync(
-                `powershell -NoProfile -Command "${script.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`,
-                { timeout: 10_000 },
-            );
-
-            const parts = stdout.trim().split("|");
-            if (parts.length < 3) throw new Error(`Unexpected output: ${stdout}`);
-
-            this.connection = {
-                pid: parseInt(parts[0], 10),
-                csrfToken: parts[1],
-                port: parseInt(parts[2], 10),
-            };
-
-            return this.connection;
+            if (os === "win32") {
+                // wmic is available on all modern Windows without PowerShell
+                const { stdout } = await execAsync(
+                    `wmic process where "name='${binaryName}'" get ProcessId,CommandLine /format:csv`,
+                    { timeout: 10_000 },
+                );
+                procOutput = stdout;
+            } else {
+                // ps works on macOS and Linux
+                const { stdout } = await execAsync(
+                    `ps aux | grep "${binaryName}" | grep -v grep`,
+                    { timeout: 10_000 },
+                );
+                procOutput = stdout;
+            }
         } catch (err) {
-            throw new Error(`Failed to connect to Language Server: ${(err as Error).message}`);
+            throw new Error(`Language Server process not found (${binaryName}): ${(err as Error).message}`);
         }
+
+        if (!procOutput.trim()) {
+            throw new Error(`Language Server process not found: no process matching ${binaryName}`);
+        }
+
+        // Step 2: Extract CSRF token from command line
+        const csrfMatch = procOutput.match(/--csrf_token[=\s]+([a-f0-9-]+)/i);
+        if (!csrfMatch) {
+            throw new Error("CSRF token not found in Language Server command line");
+        }
+        const csrfToken = csrfMatch[1];
+
+        // Step 3: Extract PID
+        let pid: number;
+        if (os === "win32") {
+            // wmic CSV format: Node,CommandLine,ProcessId
+            const lines = procOutput.split("\n").filter(l => l.includes(binaryName));
+            const lastLine = lines[0]?.trim();
+            if (!lastLine) throw new Error("Could not parse PID from wmic output");
+            // PID is the last field in CSV
+            const fields = lastLine.split(",");
+            pid = parseInt(fields[fields.length - 1], 10);
+        } else {
+            // ps aux format: USER PID ... COMMAND
+            const cols = procOutput.trim().split(/\s+/);
+            pid = parseInt(cols[1], 10);
+        }
+
+        if (isNaN(pid)) throw new Error("Could not determine Language Server PID");
+
+        // Step 4: Find listening port
+        let portOutput: string;
+        try {
+            if (os === "win32") {
+                const { stdout } = await execAsync(
+                    `netstat -ano | findstr "LISTENING" | findstr "${pid}"`,
+                    { timeout: 10_000 },
+                );
+                portOutput = stdout;
+            } else if (os === "darwin") {
+                const { stdout } = await execAsync(
+                    `lsof -iTCP -sTCP:LISTEN -P -n -p ${pid}`,
+                    { timeout: 10_000 },
+                );
+                portOutput = stdout;
+            } else {
+                // Linux — ss or netstat
+                const { stdout } = await execAsync(
+                    `ss -tlnp | grep "pid=${pid}"`,
+                    { timeout: 10_000 },
+                );
+                portOutput = stdout;
+            }
+        } catch (err) {
+            throw new Error(`Could not find listening port for PID ${pid}: ${(err as Error).message}`);
+        }
+
+        let port: number | undefined;
+        if (os === "win32") {
+            // netstat output: TCP  0.0.0.0:PORT  0.0.0.0:0  LISTENING  PID
+            const portMatch = portOutput.match(/:(\d+)\s+.*LISTENING/i);
+            if (portMatch) port = parseInt(portMatch[1], 10);
+        } else if (os === "darwin") {
+            // lsof output: ... TCP *:PORT (LISTEN)
+            const portMatch = portOutput.match(/TCP\s+\*:(\d+)\s+\(LISTEN\)/);
+            if (portMatch) port = parseInt(portMatch[1], 10);
+        } else {
+            // ss output: LISTEN ... *:PORT ...
+            const portMatch = portOutput.match(/:(\d+)\s/);
+            if (portMatch) port = parseInt(portMatch[1], 10);
+        }
+
+        if (!port || isNaN(port)) {
+            throw new Error(`Could not parse listening port from output: ${portOutput.slice(0, 200)}`);
+        }
+
+        this.connection = { pid, csrfToken, port };
+        return this.connection;
     }
 
     /**
