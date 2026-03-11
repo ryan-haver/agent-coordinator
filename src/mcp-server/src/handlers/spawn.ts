@@ -7,13 +7,11 @@
  * and provider dispatch into a single orchestrated flow.
  */
 import { resolveWorkspaceRoot, type ToolResponse } from "./context.js";
-import { getBridgeClient } from "../bridge/client.js";
 import { getProviderRegistry } from "../bridge/registry.js";
 import { getRateLimiter } from "../bridge/rate-limiter.js";
 import { getErrorDetector } from "../bridge/error-detector.js";
 import { getVerifier, Verifier } from "../bridge/verifier.js";
 import { getOrchestrator } from "../bridge/orchestrator.js";
-import { getAutoApprover } from "../bridge/auto-approver.js";
 import type { SpawnResult } from "../bridge/provider.js";
 import { handleGetAgentPrompt } from "./agents.js";
 import { handleAddAgentToManifest } from "./agents.js";
@@ -25,7 +23,7 @@ import { handleAddAgentToManifest } from "./agents.js";
  *   1. Check rate limiter
  *   2. Generate prompt from template (or use custom_prompt)
  *   3. Register agent in manifest
- *   4. Spawn via bridge HTTP API
+ *   4. Spawn via provider (ConnectRPC / CLI)
  *   5. Start error detector watch
  */
 export async function handleSpawnAgent(args: Record<string, unknown>): Promise<ToolResponse> {
@@ -62,10 +60,11 @@ export async function handleSpawnAgent(args: Record<string, unknown>): Promise<T
 
     // 2. Generate prompt
     let prompt: string;
+    const wsRoot = resolveWorkspaceRoot(args);
+    
     if (custom_prompt) {
         prompt = custom_prompt;
     } else {
-        const wsRoot = resolveWorkspaceRoot(args);
         const promptResult = await handleGetAgentPrompt({
             role,
             mission,
@@ -123,6 +122,7 @@ export async function handleSpawnAgent(args: Record<string, unknown>): Promise<T
             newConversation: true,
             background: true,
             agentManager: true,
+            workingDirectory: wsRoot,
         });
 
         if (result.success) {
@@ -144,36 +144,14 @@ export async function handleSpawnAgent(args: Record<string, unknown>): Promise<T
         console.warn(`[Quota Router] Provider ${selectedProvider} hit quota limit. Failing over...`);
     }
 
-    // Fallback: direct bridge client (legacy path) if all registry providers failed/exhausted
-    if (!result || (!result.success && Array.from(attemptedProviders).length === 0)) {
-        const client = getBridgeClient();
-        const fallbackResult = await client.spawn(prompt, {
-            newConversation: true,
-            background: true,
-            agentManager: true,
-        });
-        if (!fallbackResult.success) {
-            limiter.recordError();
-            return {
-                toolResult: `Spawn failed (fallback): ${fallbackResult.error}`,
-                content: [{ type: "text", text: JSON.stringify({
-                    success: false, agent_id, role,
-                    error: `No provider available. Fallback error: ${fallbackResult.error}`,
-                    stats: limiter.getStats(),
-                }, null, 2) }],
-            };
-        }
-        limiter.recordSpawn();
-        if (fallbackResult.conversationId) {
-            getErrorDetector().watchAgent(agent_id, fallbackResult.conversationId, "antigravity (fallback)");
-        }
+    // If no providers were available at all, return a clear error
+    if (!result) {
+        limiter.recordError();
         return {
-            toolResult: `Agent ${agent_id} spawned (fallback)`,
+            toolResult: `Spawn failed: no eligible providers found`,
             content: [{ type: "text", text: JSON.stringify({
-                success: true, agent_id, role, phase, model,
-                provider: "antigravity (fallback)",
-                conversationId: fallbackResult.conversationId,
-                promptLength: fallbackResult.promptLength,
+                success: false, agent_id, role,
+                error: "No eligible providers found. Check provider configuration and health.",
                 stats: limiter.getStats(),
             }, null, 2) }],
         };
@@ -228,7 +206,6 @@ export async function handleSpawnAgent(args: Record<string, unknown>): Promise<T
  * get_bridge_status — Provider health and agent status.
  *
  * Reports all registered providers, their health, and active agent watches.
- * Backward-compatible: still reports bridge-specific data.
  */
 export async function handleGetBridgeStatus(_args: Record<string, unknown>): Promise<ToolResponse> {
     const registry = getProviderRegistry();
@@ -250,16 +227,6 @@ export async function handleGetBridgeStatus(_args: Record<string, unknown>): Pro
         capabilities: p.capabilities,
     }));
 
-    // Backward compat: try to get conversations from bridge
-    let conversations: unknown[] = [];
-    try {
-        const client = getBridgeClient();
-        const bridgeHealth = await client.ping();
-        if (bridgeHealth.online) {
-            conversations = await client.getConversations();
-        }
-    } catch { /* bridge may not be available */ }
-
     const status = {
         providers,
         rateLimiter: limiter.getStats(),
@@ -270,7 +237,6 @@ export async function handleGetBridgeStatus(_args: Record<string, unknown>): Pro
             runningFor: `${Math.round((Date.now() - w.startedAt) / 1000)}s`,
             lastError: w.lastError,
         })),
-        conversations,
         totalActive: registry.getTotalActiveCount(),
     };
 
@@ -284,15 +250,35 @@ export async function handleGetBridgeStatus(_args: Record<string, unknown>): Pro
 }
 
 /**
- * stop_agent — Mark agent as stopped and unwatch.
+ * stop_agent — Stop a running agent and unwatch.
+ *
+ * Attempts to cancel the agent via the provider's stop() method,
+ * then unwatches from the error detector and decrements rate limiter.
  */
 export async function handleStopAgent(args: Record<string, unknown>): Promise<ToolResponse> {
     const agent_id = args?.agent_id as string;
     const reason = (args?.reason as string) ?? "Manually stopped";
     if (!agent_id) throw new Error("Missing required argument: agent_id");
 
+    const registry = getProviderRegistry();
     const detector = getErrorDetector();
     const watch = detector.getWatch(agent_id);
+
+    // Attempt to stop the agent via its provider
+    let stopAttempted = false;
+    let stopSupported = false;
+    if (watch?.providerName && watch?.conversationId) {
+        const provider = registry.getProvider(watch.providerName);
+        if (provider) {
+            stopAttempted = true;
+            try {
+                await provider.stop(watch.conversationId);
+                stopSupported = true;
+            } catch {
+                // Provider may not support stop — degrade gracefully
+            }
+        }
+    }
 
     // Unwatch the agent
     detector.unwatchAgent(agent_id);
@@ -300,6 +286,9 @@ export async function handleStopAgent(args: Record<string, unknown>): Promise<To
     // Decrement active count
     const limiter = getRateLimiter();
     limiter.recordCompletion();
+    if (watch?.providerName) {
+        registry.recordCompletion(watch.providerName);
+    }
 
     return {
         toolResult: `Agent ${agent_id} stopped`,
@@ -311,6 +300,8 @@ export async function handleStopAgent(args: Record<string, unknown>): Promise<To
                 wasWatched: !!watch,
                 conversationId: watch?.conversationId,
                 ranFor: watch ? `${Math.round((Date.now() - watch.startedAt) / 1000)}s` : "unknown",
+                stopAttempted,
+                stopSupported,
             }, null, 2),
         }],
     };
@@ -326,18 +317,18 @@ export async function handleVerifyAgentWork(args: Record<string, unknown>): Prom
     const wsRoot = args?.workspace_root ? resolveWorkspaceRoot(args) : undefined;
     const verifier = getVerifier();
 
-    // Optionally filter to specific checks
+    // Optionally filter to specific checks (save originals for restore)
     const checkNames = args?.checks as string[] | undefined;
+    const originalChecks = verifier.getChecks();
     if (checkNames && checkNames.length > 0) {
-        const allChecks = verifier.getChecks();
-        verifier.setChecks(allChecks.filter(c => checkNames.includes(c.name)));
+        verifier.setChecks(originalChecks.filter(c => checkNames.includes(c.name)));
     }
 
     const result = await verifier.verify(wsRoot);
 
     // Restore full check list if we filtered
     if (checkNames && checkNames.length > 0) {
-        verifier.setChecks(getVerifier().getChecks());
+        verifier.setChecks(originalChecks);
     }
 
     const retryContext = result.passed ? "" : Verifier.buildRetryContext(result);
@@ -463,34 +454,18 @@ export async function handleExecuteSwarm(args: Record<string, unknown>): Promise
         throw new Error(`Provider '${defaultProvider.name}' is offline. Start the provider or enable another.`);
     }
 
-    // Start auto-approver if requested
-    const approver = getAutoApprover();
-    if (autoApprove) {
-        approver.start();
-    }
-
     // Execute with callbacks that wire into existing handlers
     const result = await orchestrator.execute(manifest, {
         spawnAgent: async (agent) => {
-            const spawnResult = await handleSpawnAgent({
+            await handleSpawnAgent({
                 role: agent.role,
                 mission: `Execute assigned scope: ${agent.scope}`,
                 scope: agent.scope,
                 agent_id: agent.id,
-                phase: "1", // Phase is embedded in manifest
+                phase: agent.phase ?? "1",
                 model: agent.model,
                 workspace_root: wsRoot,
             });
-
-            // Track spawned cascade for auto-approval
-            if (autoApprove && spawnResult?.content?.[0]) {
-                try {
-                    const data = JSON.parse((spawnResult.content[0] as { text: string }).text);
-                    if (data.conversationId) {
-                        approver.trackCascade(data.conversationId);
-                    }
-                } catch { /* best effort */ }
-            }
         },
         retryAgent: async (agent, retryContext, attempt) => {
             await handleSpawnAgent({
@@ -505,11 +480,6 @@ export async function handleExecuteSwarm(args: Record<string, unknown>): Promise
         },
     });
 
-    // Stop auto-approver after execution completes
-    if (autoApprove) {
-        approver.stop();
-    }
-
     return {
         toolResult: JSON.stringify(result),
         content: [{
@@ -520,7 +490,7 @@ export async function handleExecuteSwarm(args: Record<string, unknown>): Promise
                 completedAgents: result.completedAgents,
                 failedAgents: result.failedAgents,
                 totalDurationMs: result.totalDurationMs,
-                autoApprover: approver.getStatus(),
+                autoApprover: "deprecated_eager_execution",
                 phases: result.phases.map(p => ({
                     phase: p.phase,
                     allPassed: p.allPassed,
@@ -578,110 +548,6 @@ export async function handleRetryAgent(args: Record<string, unknown>): Promise<T
     });
 
     return result;
-}
-
-/**
- * auto_approver — Control the auto-approver for agent interactions.
- *
- * Actions:
- *   - start: Begin auto-approving interactions for tracked cascades
- *   - stop: Stop auto-approving
- *   - status: Get current auto-approver status and log
- *   - approve: Manually approve a specific interaction
- *   - track: Track a cascade ID for auto-approval
- */
-export async function handleAutoApprover(args: Record<string, unknown>): Promise<ToolResponse> {
-    const action = args?.action as string;
-
-    if (!action) {
-        throw new Error("Missing required argument: action (start|stop|status|approve|track)");
-    }
-
-    const approver = getAutoApprover();
-
-    switch (action) {
-        case "start": {
-            const config = args?.config as Record<string, unknown> | undefined;
-            if (config) {
-                approver.updateConfig({
-                    pollIntervalMs: config.poll_interval_ms as number | undefined,
-                    approveFileWrites: config.approve_file_writes as boolean | undefined,
-                    approveCommands: config.approve_commands as boolean | undefined,
-                });
-            }
-            approver.start();
-            return {
-                toolResult: "Auto-approver started",
-                content: [{
-                    type: "text",
-                    text: JSON.stringify({ success: true, status: approver.getStatus() }, null, 2),
-                }],
-            };
-        }
-
-        case "stop": {
-            approver.stop();
-            return {
-                toolResult: "Auto-approver stopped",
-                content: [{
-                    type: "text",
-                    text: JSON.stringify({ success: true, status: approver.getStatus() }, null, 2),
-                }],
-            };
-        }
-
-        case "status": {
-            return {
-                toolResult: JSON.stringify(approver.getStatus()),
-                content: [{
-                    type: "text",
-                    text: JSON.stringify({
-                        status: approver.getStatus(),
-                        recentApprovals: approver.getLog().slice(-10),
-                    }, null, 2),
-                }],
-            };
-        }
-
-        case "track": {
-            const cascadeId = args?.cascade_id as string;
-            if (!cascadeId) throw new Error("Missing cascade_id for track action");
-            approver.trackCascade(cascadeId);
-            return {
-                toolResult: `Tracking cascade ${cascadeId}`,
-                content: [{
-                    type: "text",
-                    text: JSON.stringify({ success: true, cascadeId, status: approver.getStatus() }, null, 2),
-                }],
-            };
-        }
-
-        case "approve": {
-            const { getAutoApprover: getAA } = await import("../bridge/auto-approver.js");
-            const aa = getAA();
-            const cascadeId = args?.cascade_id as string;
-            const trajectoryId = args?.trajectory_id as string;
-            const stepIndex = args?.step_index as number;
-            const type = args?.type as "filePermission" | "runCommand";
-            const target = args?.target as string;
-
-            if (!cascadeId || !trajectoryId || stepIndex === undefined || !type || !target) {
-                throw new Error("Missing required args: cascade_id, trajectory_id, step_index, type, target");
-            }
-
-            const result = await aa.approve({ cascadeId, trajectoryId, stepIndex, type, target });
-            return {
-                toolResult: JSON.stringify(result),
-                content: [{
-                    type: "text",
-                    text: JSON.stringify(result, null, 2),
-                }],
-            };
-        }
-
-        default:
-            throw new Error(`Unknown action: ${action}. Use start|stop|status|approve|track`);
-    }
 }
 
 /**

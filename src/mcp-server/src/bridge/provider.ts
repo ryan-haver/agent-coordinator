@@ -67,7 +67,7 @@ export interface SessionInfo {
  * AgentProvider — the contract every spawn backend implements.
  *
  * Examples:
- *   - AntigravityProvider: HTTP to Bridge extension on :9090
+ *   - AntigravityProvider: Native ConnectRPC to Language Server
  *   - ClaudeCodeProvider: CLI subprocess via `claude --print`
  *   - CodexProvider: CLI subprocess via `codex --approval-mode full-auto`
  *   - HeadlessProvider: Raw HTTP API to vLLM/Ollama

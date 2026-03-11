@@ -2,7 +2,7 @@
  * Bridge barrel export — re-exports all bridge module components.
  */
 export { BridgeClient, getBridgeClient } from "./client.js";
-export type { SpawnOptions, SpawnResult, BridgeConversation, BridgeHealth } from "./client.js";
+export type { SpawnOptions, SpawnResult, BridgeHealth } from "./client.js";
 
 export { RateLimiter, getRateLimiter } from "./rate-limiter.js";
 export type { RateLimiterConfig, RateLimitCheck } from "./rate-limiter.js";
@@ -50,9 +50,9 @@ export type { TaskBoardSnapshot, PhaseStatus, TaskBoardEntry } from "./task-boar
 export { getPopulatedPrompt, interpolate, buildVariableMap, getTurnLimit, listAvailableRoles } from "./template-engine.js";
 export type { TemplateContext } from "./template-engine.js";
 
-// Auto-approver (Phase 7G — programmatic interaction approval)
-export { AutoApprover, getAutoApprover, LanguageServerClient, getLanguageServerClient } from "./auto-approver.js";
-export type { AutoApproverConfig, InteractionApproval, ApprovalResult, LanguageServerConnection } from "./auto-approver.js";
+// ConnectRPC Client (Phase 9F — headless agent logic)
+export { ConnectRpcClient } from "./connect-rpc-client.js";
+export type { SpawnOptions as RpcSpawnOptions, SpawnResult as RpcSpawnResult, LanguageServerConnection } from "./connect-rpc-client.js";
 
 // Provider loader (Phase 8A — config-driven registry bootstrap)
 export { loadProviders, readProvidersConfig, writeProvidersConfig, createProvider } from "./provider-loader.js";

@@ -3,8 +3,9 @@
  *
  * Runs automated checks (build, test, lint, type-check) after an agent
  * reports completion. Supports configurable check lists and retry on failure.
+ * Commands are executed locally via child_process.execSync.
  */
-import { getBridgeClient } from "./client.js";
+import { execSync } from "child_process";
 
 export interface VerificationCheck {
     /** Check name (e.g. "build", "test", "lint") */
@@ -45,45 +46,36 @@ export class Verifier {
 
     /**
      * Run all verification checks.
-     * Executes commands via the Agent Bridge terminal endpoint.
+     * Executes commands directly via child_process.execSync.
      */
     async verify(workspaceRoot?: string): Promise<VerificationResult> {
-        const client = getBridgeClient();
         const results: CheckResult[] = [];
         const start = Date.now();
 
         for (const check of this.checks) {
             const checkStart = Date.now();
             try {
-                const resp = await globalThis.fetch(
-                    `http://127.0.0.1:${process.env.AGENT_BRIDGE_PORT ?? "9090"}/api/terminal/execute`,
-                    {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            command: check.command,
-                            cwd: workspaceRoot,
-                            timeout: this.timeoutMs,
-                        }),
-                        signal: AbortSignal.timeout(this.timeoutMs),
-                    }
-                );
-
-                const data = await resp.json() as Record<string, unknown>;
-                const exitCode = data.exitCode ?? data.exit_code ?? (resp.ok ? 0 : 1);
-                const output = String(data.output ?? data.stdout ?? data.stderr ?? "");
+                const stdout = execSync(check.command, {
+                    cwd: workspaceRoot || undefined,
+                    timeout: this.timeoutMs,
+                    encoding: "utf8",
+                    maxBuffer: 10 * 1024 * 1024,
+                    stdio: ["pipe", "pipe", "pipe"],
+                });
 
                 results.push({
                     name: check.name,
-                    passed: exitCode === 0,
-                    output: output.slice(0, 2000), // Cap output length
+                    passed: true,
+                    output: String(stdout).slice(0, 2000),
                     durationMs: Date.now() - checkStart,
                 });
-            } catch (err) {
+            } catch (err: any) {
+                // execSync throws on non-zero exit — capture output from the error
+                const output = String(err.stdout ?? err.stderr ?? err.message ?? "").slice(0, 2000);
                 results.push({
                     name: check.name,
                     passed: false,
-                    output: `Check failed: ${(err as Error).message}`,
+                    output: output || `Check failed: exit code ${err.status ?? "unknown"}`,
                     durationMs: Date.now() - checkStart,
                 });
             }

@@ -54,6 +54,8 @@ const DEFAULT_CONFIG: OrchestratorConfig = {
     phaseTimeoutMs: 30 * 60_000, // 30 minutes per phase
 };
 
+import { getTableFromSection } from "../utils/manifest.js";
+
 /**
  * Parse a swarm manifest to extract phases and their agents.
  */
@@ -62,23 +64,29 @@ export function parseManifestPhases(manifestContent: string): Map<string, Array<
     role: string;
     model: string;
     scope: string;
+    phase: string;
 }>> {
-    const phases = new Map<string, Array<{ id: string; role: string; model: string; scope: string }>>();
+    const phases = new Map<string, Array<{ id: string; role: string; model: string; scope: string; phase: string }>>();
 
-    // Parse Agents table from markdown
-    const agentsMatch = manifestContent.match(/## Agents\s*\n\|[^\n]*\|\s*\n\|[-\s|]*\|\s*\n([\s\S]*?)(?:\n##\s|$)/);
-    if (!agentsMatch) return phases;
+    const table = getTableFromSection(manifestContent, "Agents");
+    if (!table) return phases;
 
-    const rows = agentsMatch[1].split("\n").filter(l => l.trim().startsWith("|"));
-    for (const row of rows) {
-        const cells = row.split("|").map(c => c.trim()).filter(Boolean);
-        if (cells.length < 5) continue;
+    for (const row of table.rows) {
+        const id = row["ID"];
+        const role = row["Role"];
+        const model = row["Model"];
+        const scope = row["Scope"];
+        const phase = row["Phase"];
+        const status = row["Status"];
 
-        const [id, role, model, phase, scope] = cells;
         if (!id || !phase) continue;
+        // Don't spawn agents that are already completed/verified
+        if (status && (status.includes("Done") || status.includes("Verified") || status.includes("✅"))) {
+            continue;
+        }
 
         const phaseAgents = phases.get(phase) ?? [];
-        phaseAgents.push({ id, role, model, scope });
+        phaseAgents.push({ id, role, model, scope, phase });
         phases.set(phase, phaseAgents);
     }
 
@@ -89,8 +97,8 @@ export function parseManifestPhases(manifestContent: string): Map<string, Array<
  * Build a structured execution plan from manifest phases.
  */
 export function buildExecutionPlan(
-    phases: Map<string, Array<{ id: string; role: string; model: string; scope: string }>>,
-): Array<{ phase: string; agents: Array<{ id: string; role: string; model: string; scope: string }> }> {
+    phases: Map<string, Array<{ id: string; role: string; model: string; scope: string; phase: string }>>,
+): Array<{ phase: string; agents: Array<{ id: string; role: string; model: string; scope: string; phase: string }> }> {
     return Array.from(phases.entries())
         .sort(([a], [b]) => parseInt(a) - parseInt(b))
         .map(([phase, agents]) => ({ phase, agents }));
@@ -148,7 +156,7 @@ export class Orchestrator {
      * Uses callbacks so the orchestrator stays decoupled from handlers.
      */
     async executePhase(
-        agents: Array<{ id: string; role: string; model: string; scope: string }>,
+        agents: Array<{ id: string; role: string; model: string; scope: string; phase: string }>,
         callbacks: ExecutionCallbacks,
     ): Promise<PhaseResult> {
         const start = Date.now();
@@ -320,8 +328,8 @@ export class Orchestrator {
 
 /** Callback interface — keeps Orchestrator decoupled from MCP handlers */
 export interface ExecutionCallbacks {
-    spawnAgent(agent: { id: string; role: string; model: string; scope: string }): Promise<void>;
-    retryAgent?(agent: { id: string; role: string; model: string; scope: string }, retryContext: string, attempt: number): Promise<void>;
+    spawnAgent(agent: { id: string; role: string; model: string; scope: string; phase: string }): Promise<void>;
+    retryAgent?(agent: { id: string; role: string; model: string; scope: string; phase: string }, retryContext: string, attempt: number): Promise<void>;
     onProgress?(info: { activeAgents: number; totalAgents: number; elapsedMs: number }): void;
     onPhaseComplete?(phase: string, result: PhaseResult): void;
 }

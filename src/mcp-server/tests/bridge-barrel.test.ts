@@ -89,12 +89,9 @@ describe("Bridge barrel exports — completeness", () => {
         expect(typeof mod.listAvailableRoles).toBe("function");
     });
 
-    it("exports AutoApprover and singletons", async () => {
+    it("exports ConnectRpcClient", async () => {
         const mod = await import("../src/bridge/index.js");
-        expect(mod.AutoApprover).toBeDefined();
-        expect(mod.LanguageServerClient).toBeDefined();
-        expect(typeof mod.getAutoApprover).toBe("function");
-        expect(typeof mod.getLanguageServerClient).toBe("function");
+        expect(mod.ConnectRpcClient).toBeDefined();
     });
 });
 
@@ -116,19 +113,6 @@ describe("Bridge barrel exports — singleton consistency", () => {
         expect(a).toBe(b);
     });
 
-    it("getAutoApprover returns same instance", async () => {
-        const { getAutoApprover } = await import("../src/bridge/index.js");
-        const a = getAutoApprover();
-        const b = getAutoApprover();
-        expect(a).toBe(b);
-    });
-
-    it("getLanguageServerClient returns same instance", async () => {
-        const { getLanguageServerClient } = await import("../src/bridge/index.js");
-        const a = getLanguageServerClient();
-        const b = getLanguageServerClient();
-        expect(a).toBe(b);
-    });
 });
 
 // ════════════════════════════════════════════════════════════════════════

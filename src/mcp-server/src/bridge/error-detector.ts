@@ -4,7 +4,6 @@
  * Polls the Agent Bridge for conversation status and detects failures.
  * Supports configurable retry policies with escalating context.
  */
-import { getBridgeClient } from "./client.js";
 import { getRateLimiter } from "./rate-limiter.js";
 
 export interface AgentWatch {
@@ -148,7 +147,6 @@ export class ErrorDetector {
      * Poll all watched agents for status changes.
      */
     async pollAll(): Promise<void> {
-        const client = getBridgeClient();
         const { getProviderRegistry } = await import("./registry.js");
         const registry = getProviderRegistry();
 
@@ -159,24 +157,14 @@ export class ErrorDetector {
                 let statusStr = "";
                 let lastMessage = "";
 
-                if (watch.providerName === "antigravity (fallback)") {
-                    const conv = await client.getConversation(watch.conversationId);
-                    if (!conv) {
-                        this.failAgent(watch, "Conversation no longer exists");
-                        continue;
-                    }
-                    statusStr = String(conv.status ?? conv.state ?? "").toLowerCase();
-                    lastMessage = String(conv.lastMessage ?? conv.last_message ?? "");
-                } else {
-                    const provider = registry.getProvider(watch.providerName);
-                    if (!provider) {
-                        this.failAgent(watch, `Provider ${watch.providerName} not found`);
-                        continue;
-                    }
-                    const status = await provider.getAgentStatus(watch.conversationId);
-                    statusStr = status.state.toLowerCase();
-                    lastMessage = status.lastMessage ?? "";
+                const provider = registry.getProvider(watch.providerName);
+                if (!provider) {
+                    this.failAgent(watch, `Provider ${watch.providerName} not found`);
+                    continue;
                 }
+                const status = await provider.getAgentStatus(watch.conversationId);
+                statusStr = status.state.toLowerCase();
+                lastMessage = status.lastMessage ?? "";
 
                 watch.lastCheckedAt = Date.now();
 
